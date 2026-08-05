@@ -1,0 +1,244 @@
+package com.example.localledger.ui.ledger
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavHostController
+import com.example.localledger.domain.model.Ledger
+import com.example.localledger.ui.AppSession
+import com.example.localledger.ui.component.ConfirmDeleteDialog
+import com.example.localledger.ui.home.SectionTitle
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun LedgerManageScreen(
+    appSession: AppSession,
+    navController: NavHostController,
+    viewModel: LedgerManageViewModel = hiltViewModel(),
+) {
+    val session by viewModel.session.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+    var showCreateDialog by remember { mutableStateOf(false) }
+    var renameTarget by remember { mutableStateOf<Ledger?>(null) }
+    var archiveTarget by remember { mutableStateOf<Ledger?>(null) }
+
+    LaunchedEffect(Unit) {
+        viewModel.effects.collect { effect ->
+            when (effect) {
+                is LedgerEffect.ShowMessage -> snackbarHostState.showSnackbar(effect.message)
+            }
+        }
+    }
+
+    val active = session.ledgers.filter { !it.isArchived }
+    val archived = session.ledgers.filter { it.isArchived }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("账本管理") },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    }
+                },
+            )
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        floatingActionButton = {
+            FloatingActionButton(onClick = { showCreateDialog = true }) {
+                Icon(Icons.Default.Add, contentDescription = "新建账本")
+            }
+        },
+    ) { padding ->
+        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
+            item { SectionTitle("使用中") }
+            items(active, key = { it.id }) { ledger ->
+                LedgerRow(
+                    ledger = ledger,
+                    isCurrent = ledger.id == session.currentLedgerId,
+                    onSwitch = { viewModel.switchTo(ledger.id) },
+                    onRename = { renameTarget = ledger },
+                    onArchive = { archiveTarget = ledger },
+                )
+                HorizontalDivider()
+            }
+            if (archived.isNotEmpty()) {
+                item { SectionTitle("已归档") }
+                items(archived, key = { it.id }) { ledger ->
+                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
+                        Text(
+                            ledger.name,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    HorizontalDivider()
+                }
+            }
+        }
+    }
+
+    if (showCreateDialog) {
+        NameInputDialog(
+            title = "新建账本",
+            confirmLabel = "创建",
+            onConfirm = { name ->
+                showCreateDialog = false
+                viewModel.create(name)
+            },
+            onDismiss = { showCreateDialog = false },
+        )
+    }
+
+    renameTarget?.let { ledger ->
+        NameInputDialog(
+            title = "修改账本名称",
+            initialValue = ledger.name,
+            confirmLabel = "保存",
+            onConfirm = { name ->
+                renameTarget = null
+                viewModel.rename(ledger, name)
+            },
+            onDismiss = { renameTarget = null },
+        )
+    }
+
+    archiveTarget?.let { ledger ->
+        ConfirmDeleteDialog(
+            title = "归档账本“${ledger.name}”？",
+            message = "归档后不能再记录新流水，历史数据仍会保留。",
+            onConfirm = {
+                archiveTarget = null
+                viewModel.archive(ledger)
+            },
+            onDismiss = { archiveTarget = null },
+        )
+    }
+}
+
+@Composable
+private fun LedgerRow(
+    ledger: Ledger,
+    isCurrent: Boolean,
+    onSwitch: () -> Unit,
+    onRename: () -> Unit,
+    onArchive: () -> Unit,
+) {
+    var menuExpanded by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onSwitch)
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(ledger.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
+            if (isCurrent) {
+                Text(
+                    "当前账本",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+        IconButton(onClick = { menuExpanded = true }) {
+            Icon(Icons.Default.MoreVert, contentDescription = "更多操作")
+        }
+        DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+            if (!isCurrent) {
+                DropdownMenuItem(
+                    text = { Text("切换到此账本") },
+                    onClick = {
+                        menuExpanded = false
+                        onSwitch()
+                    },
+                )
+            }
+            DropdownMenuItem(
+                text = { Text("修改名称") },
+                onClick = {
+                    menuExpanded = false
+                    onRename()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("归档") },
+                onClick = {
+                    menuExpanded = false
+                    onArchive()
+                },
+            )
+        }
+    }
+}
+
+@Composable
+fun NameInputDialog(
+    title: String,
+    initialValue: String = "",
+    confirmLabel: String,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var value by remember { mutableStateOf(initialValue) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            OutlinedTextField(
+                value = value,
+                onValueChange = { value = it.take(30) },
+                singleLine = true,
+                label = { Text("名称") },
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(value.trim()) },
+                enabled = value.isNotBlank(),
+            ) { Text(confirmLabel) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        },
+    )
+}
