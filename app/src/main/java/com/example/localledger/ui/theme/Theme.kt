@@ -1,0 +1,95 @@
+package com.example.localledger.ui.theme
+
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
+import com.example.localledger.core.storage.ThemeMode
+
+val ExpenseColorLight = Color(0xFFC4392F)
+val IncomeColorLight = Color(0xFF1E7D5A)
+val TransferColorLight = Color(0xFF5C6B7A)
+val ExpenseColorDark = Color(0xFFF08A80)
+val IncomeColorDark = Color(0xFF7ED0AE)
+val TransferColorDark = Color(0xFF9FB0BF)
+
+private val LightColors = lightColorScheme(
+    primary = Color(0xFF2E5D4B),
+    onPrimary = Color(0xFFFFFFFF),
+    primaryContainer = Color(0xFFD0E8DC),
+    onPrimaryContainer = Color(0xFF0B2A1E),
+    secondary = Color(0xFF4E6355),
+    onSecondary = Color(0xFFFFFFFF),
+    secondaryContainer = Color(0xFFD1E8D8),
+    onSecondaryContainer = Color(0xFF0C1F14),
+    tertiary = Color(0xFF3D6373),
+    onTertiary = Color(0xFFFFFFFF),
+    tertiaryContainer = Color(0xFFC1E8FA),
+    onTertiaryContainer = Color(0xFF001F29),
+    background = Color(0xFFF7F6F2),
+    onBackground = Color(0xFF1A1C19),
+    surface = Color(0xFFF7F6F2),
+    onSurface = Color(0xFF1A1C19),
+    surfaceVariant = Color(0xFFDFE4DC),
+    onSurfaceVariant = Color(0xFF414942),
+    outline = Color(0xFF717971),
+    error = Color(0xFFBA1A1A),
+    onError = Color(0xFFFFFFFF),
+)
+
+private val DarkColors = darkColorScheme(
+    primary = Color(0xFFA9D3BF),
+    onPrimary = Color(0xFF0B2A1E),
+    primaryContainer = Color(0xFF2E5D4B),
+    onPrimaryContainer = Color(0xFFD0E8DC),
+    secondary = Color(0xFFB5CCBD),
+    onSecondary = Color(0xFF213528),
+    secondaryContainer = Color(0xFF374B3E),
+    onSecondaryContainer = Color(0xFFD1E8D8),
+    tertiary = Color(0xFFA5CCDF),
+    onTertiary = Color(0xFF073543),
+    tertiaryContainer = Color(0xFF254B5A),
+    onTertiaryContainer = Color(0xFFC1E8FA),
+    background = Color(0xFF121411),
+    onBackground = Color(0xFFE2E3DE),
+    surface = Color(0xFF121411),
+    onSurface = Color(0xFFE2E3DE),
+    surfaceVariant = Color(0xFF414942),
+    onSurfaceVariant = Color(0xFFC1C9BF),
+    outline = Color(0xFF8B938A),
+    error = Color(0xFFFFB4AB),
+    onError = Color(0xFF690005),
+)
+
+@Composable
+fun amountColor(type: com.example.localledger.domain.model.TransactionType): Color {
+    val dark = isSystemInDarkTheme()
+    return when (type) {
+        com.example.localledger.domain.model.TransactionType.EXPENSE ->
+            if (dark) ExpenseColorDark else ExpenseColorLight
+        com.example.localledger.domain.model.TransactionType.INCOME ->
+            if (dark) IncomeColorDark else IncomeColorLight
+        com.example.localledger.domain.model.TransactionType.TRANSFER ->
+            if (dark) TransferColorDark else TransferColorLight
+    }
+}
+
+@Composable
+fun LocalLedgerTheme(
+    themeMode: ThemeMode = ThemeMode.SYSTEM,
+    content: @Composable () -> Unit,
+) {
+    val dark = when (themeMode) {
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+    }
+    MaterialTheme(
+        colorScheme = if (dark) DarkColors else LightColors,
+        typography = Typography(),
+        content = content,
+    )
+}
