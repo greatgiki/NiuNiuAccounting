@@ -1,5 +1,7 @@
 # Local Ledger Android Backend
 
+> 本项目开源协议存在更改可能。
+
 这是按照三份设计文档实现的 Android 本地记账后端。工程只包含本地数据访问与业务逻辑，
 不声明 `INTERNET` 或公共存储权限，也不包含远程服务。
 
