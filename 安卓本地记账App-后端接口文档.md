@@ -690,6 +690,9 @@ interface TransactionRepository {
     ): Flow<List<TransactionDetail>>
 
     suspend fun saveTransaction(command: SaveTransactionCommand): String
+
+    fun observeTransaction(transactionId: String): Flow<TransactionDetail?>
+
     suspend fun deleteTransaction(transactionId: String)
 }
 ```
@@ -725,6 +728,10 @@ transactionRepository.observeTransactions(
 )
 ```
 
+#### `observeTransaction`
+
+按全局 ID 观察单笔流水详情，用于编辑页加载已有流水。不带账本作用域，流水不存在时发射 `null`。
+
 #### `saveTransaction`
 
 该接口同时支持新增和编辑，并在 Room 事务中执行完整校验和写入。
@@ -751,6 +758,8 @@ transactionRepository.observeTransactions(
 - 流水不存在时抛出 `TransactionNotFound`。
 - 删除不可撤销。
 - 删除后明细、余额和统计 `Flow` 自动刷新。
+
+注意：当前签名只按全局 ID 删除，不校验所属账本。计划变更（尚未实现，见设计文档 §7.3）：签名将改为 `deleteTransaction(ledgerId, transactionId)`，SQL 增加 `AND ledger_id = :ledgerId` 条件，流水不属于指定账本时按不存在处理。
 
 ## 11. 流水 Use Case
 
@@ -832,6 +841,8 @@ UI 应在调用前显示二次确认对话框。
 deleteTransactionUseCase(transactionId)
 ```
 
+计划变更（尚未实现）：签名将改为 `invoke(ledgerId, transactionId)`，与 `TransactionRepository.deleteTransaction` 的账本作用域变更同步。
+
 ## 12. 日期范围接口
 
 ### 12.1 `StatisticsPeriod`
@@ -870,6 +881,8 @@ fun zoneId(): ZoneId
 ```
 
 所有换算都使用调用时的设备默认时区。
+
+时区语义说明：归日、归月使用查询时刻的设备默认时区，属有意的显示语义。设备时区变化后，同一笔历史流水可能被归入不同的本地日期或月份，历史统计结果随之变化，该行为为预期行为（跨时区回归测试待补充）。
 
 示例：
 
@@ -1102,7 +1115,7 @@ repository.observeTransactions(ledgerId)
 5. 转账不进入收入、支出或分类统计。
 6. 账户余额不永久存储，每次根据初始余额和流水计算。
 7. 账户和分类只支持停用，不支持删除。
-8. 流水删除是硬删除，不可恢复。
+8. 流水删除是硬删除，不可恢复。（计划变更：删除将要求同时传入账本 ID，跨账本删除按流水不存在处理。）
 9. 已停用账户和分类保留历史展示，但不能用于新流水或编辑流水。
 10. 归档账本不会自动切换当前账本，前端必须更新配置状态。
 11. 流水修改和删除后，明细、统计及余额通过 Room `Flow` 自动刷新。

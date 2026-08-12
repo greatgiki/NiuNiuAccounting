@@ -186,6 +186,7 @@ updated_at INTEGER NOT NULL
 - `TRANSFER` 必须有 `to_account_id`，且 `category_id` 为 `NULL`。
 - 转账的 `account_id` 和 `to_account_id` 不得相同。
 - 所有关联账户、分类与流水必须属于同一 `ledger_id`。
+- 账户与分类的 `ledger_id` 创建后不可变，禁止变更所属账本（见第 10 节的触发器要求），防止已被引用的账户或分类跨账本移动造成统计污染。
 
 SQLite 的 `CHECK` 难以可靠验证跨表归属关系，因此该类规则必须由 Use Case 在写入前验证，并用事务防止并发状态不一致。
 
@@ -252,7 +253,7 @@ interface CategoryRepository {
 interface TransactionRepository {
     fun observeTransactions(ledgerId: String, filter: TransactionFilter): Flow<List<TransactionDetail>>
     suspend fun saveTransaction(command: SaveTransactionCommand): String
-    suspend fun deleteTransaction(transactionId: String)
+    suspend fun deleteTransaction(ledgerId: String, transactionId: String)
 }
 
 interface StatisticsRepository {
@@ -264,6 +265,8 @@ interface StatisticsRepository {
 ```
 
 Repository 对外暴露领域模型，不泄露 Room Entity、DAO 或 SQL 类型。
+
+注：以上 `deleteTransaction(ledgerId, transactionId)` 为目标签名；当前代码仍为 `deleteTransaction(transactionId)`，接口、Use Case 与调用方待同步修改。
 
 ## 7. 写入用例与事务
 
@@ -296,10 +299,12 @@ Repository 对外暴露领域模型，不泄露 Room Entity、DAO 或 SQL 类型
 
 `DeleteTransactionUseCase` 执行：
 
-1. 按 ID 读取流水。
-2. 校验流水存在。
-3. 直接执行 `DELETE FROM transactions WHERE id = :transactionId`。
+1. 按 ID 和所属账本读取流水。
+2. 校验流水存在且属于指定账本；不属于时按流水不存在处理，不泄露其他账本数据的存在性。
+3. 执行 `DELETE FROM transactions WHERE id = :transactionId AND ledger_id = :ledgerId`。
 4. 返回删除结果。
+
+删除必须携带账本 ID 是本设计账本隔离原则的一部分：仅持有全局 ID 不足以删除记录。（已定决策，`deleteTransaction` 签名与代码待同步修改）
 
 删除不可撤销，不设置 `deleted_at`，不保留回收站。UI 负责二次确认；Use Case 不假设 UI 一定完成了确认。
 
@@ -336,6 +341,8 @@ AND transaction_at < :endExclusive
 ```
 
 这种半开区间等价于包含用户选择的结束日期全天，且不会出现 `23:59:59.999` 精度边界问题。
+
+时区语义（产品决策，已实现行为）：归日、归月使用查询时刻的设备默认时区，这是有意的显示语义。设备时区变化后，同一笔历史流水可能被归入不同的本地日期或月份，历史统计结果随之变化。该行为为预期行为，不视为缺陷。若未来需求变更为历史归属必须稳定（账本历史不随时区漂移），再引入账本级锁定 `ZoneId` 或冗余存储业务本地日期；该改动涉及 Schema 变更，决策越晚成本越高。
 
 ### 8.2 支持的统计范围
 
@@ -433,6 +440,7 @@ SQLite 的 UTC 时间戳不能直接可靠地按用户本地日历聚合。MVP �
 - 每个 Migration 需要从旧版本真实数据库文件升级的测试。
 - 初始预置数据只在数据库为空时插入，且使用固定或可识别的 UUID，避免升级或重启时重复插入。
 - 外键约束应开启，并优先使用 `RESTRICT` 防止误删仍被历史流水引用的账户、分类或账本。
+- 账户、分类的 `ledger_id` 必须由 `BEFORE UPDATE OF ledger_id` 触发器保护：新旧值不同时 `RAISE(ABORT)`，在数据库层强制账本归属不可变，不依赖 Repository 自觉。（已定决策，代码与测试待实现）
 - 每个写入异常必须向上层返回可展示的领域错误，不允许吞掉 SQLite 异常。
 
 ## 11. 后端测试
@@ -443,8 +451,11 @@ SQLite 的 UTC 时间戳不能直接可靠地按用户本地日历聚合。MVP �
 - 收入、支出、转账分别正确影响账户余额。
 - 转账不进入收入、支出及分类统计。
 - 删除流水后，余额、汇总和趋势查询正确刷新。
+- 使用其他账本的 `ledgerId` 删除流水被拒绝，目标流水不受影响。
 - 停用账户或分类不影响历史查询，但新建流水校验失败。
 - 账本之间的流水和统计相互隔离。
+- 直接更新账户或分类的 `ledger_id` 被数据库触发器拒绝。
+- 设备时区变化后，流水的日期和月份归属按新时区重新计算，符合既定的显示语义。
 - 复合筛选条件能返回正确明细。
 
 ### Use Case 测试
@@ -468,5 +479,5 @@ SQLite 的 UTC 时间戳不能直接可靠地按用户本地日历聚合。MVP �
 - 所有金额使用 `Long` 分单位，长期累计不存在浮点误差。
 - 收入、支出、转账、编辑、硬删除后，明细、统计和当前账户余额保持一致。
 - 统计准确支持指定日、月、年和自定义日期区间；年度汇总按月展示趋势。
-- 时间范围包含结束日期全天，并在设备时区变化下保持可解释的一致规则。
+- 时间范围包含结束日期全天；统计使用查询时的设备默认时区，时区变化后历史归属随之变化，该行为为预期语义（跨时区回归测试为必补项，当前尚未覆盖）。
 - 数据库升级不会因 Schema 变更清空用户账本。
