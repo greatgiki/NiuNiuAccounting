@@ -31,7 +31,7 @@ class SaveTransferUseCase @Inject constructor(
 class DeleteTransactionUseCase @Inject constructor(
     private val repository: TransactionRepository,
 ) {
-    suspend operator fun invoke(transactionId: String) {
-        repository.deleteTransaction(transactionId)
+    suspend operator fun invoke(ledgerId: String, transactionId: String) {
+        repository.deleteTransaction(ledgerId, transactionId)
     }
 }

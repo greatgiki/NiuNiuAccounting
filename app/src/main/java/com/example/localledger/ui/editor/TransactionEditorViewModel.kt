@@ -375,9 +375,10 @@ class TransactionEditorViewModel @Inject constructor(
 
     fun delete() {
         val id = transactionId ?: return
+        val ledgerId = appSession.state.value.currentLedgerId ?: return
         viewModelScope.launch {
             try {
-                deleteTransactionUseCase(id)
+                deleteTransactionUseCase(ledgerId, id)
                 effectChannel.send(EditorEffect.NavigateBack)
             } catch (error: LedgerException) {
                 effectChannel.send(EditorEffect.ShowMessage(error.message ?: "删除失败"))

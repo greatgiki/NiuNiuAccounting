@@ -693,7 +693,7 @@ interface TransactionRepository {
 
     fun observeTransaction(transactionId: String): Flow<TransactionDetail?>
 
-    suspend fun deleteTransaction(transactionId: String)
+    suspend fun deleteTransaction(ledgerId: String, transactionId: String)
 }
 ```
 
@@ -753,13 +753,12 @@ transactionRepository.observeTransactions(
 
 #### `deleteTransaction`
 
-按 ID 硬删除流水：
+按账本 ID 和流水 ID 硬删除流水：
 
-- 流水不存在时抛出 `TransactionNotFound`。
+- SQL 为 `DELETE FROM transactions WHERE id = :id AND ledger_id = :ledgerId`。
+- 流水不存在，或不属于指定账本时，抛出 `TransactionNotFound`，不区分这两种情况。
 - 删除不可撤销。
 - 删除后明细、余额和统计 `Flow` 自动刷新。
-
-注意：当前签名只按全局 ID 删除，不校验所属账本。计划变更（尚未实现，见设计文档 §7.3）：签名将改为 `deleteTransaction(ledgerId, transactionId)`，SQL 增加 `AND ledger_id = :ledgerId` 条件，流水不属于指定账本时按不存在处理。
 
 ## 11. 流水 Use Case
 
@@ -832,16 +831,14 @@ saveTransferUseCase(
 ### 11.3 `DeleteTransactionUseCase`
 
 ```kotlin
-suspend operator fun invoke(transactionId: String)
+suspend operator fun invoke(ledgerId: String, transactionId: String)
 ```
 
-UI 应在调用前显示二次确认对话框。
+UI 应在调用前显示二次确认对话框。流水不属于 `ledgerId` 时按不存在处理。
 
 ```kotlin
-deleteTransactionUseCase(transactionId)
+deleteTransactionUseCase(ledgerId, transactionId)
 ```
-
-计划变更（尚未实现）：签名将改为 `invoke(ledgerId, transactionId)`，与 `TransactionRepository.deleteTransaction` 的账本作用域变更同步。
 
 ## 12. 日期范围接口
 

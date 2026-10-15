@@ -5,6 +5,7 @@ import com.example.localledger.data.local.database.DatabaseProvider
 import com.example.localledger.data.local.database.PresetData
 import com.example.localledger.domain.error.LedgerException
 import com.example.localledger.di.ApplicationScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -56,6 +57,8 @@ class BackendInitializer @Inject constructor(
                 settings = settingsStore.update { it.copy(currentLedgerId = activeLedgerId) }
             }
             InitializationState.Ready(settings).also { mutableState.value = it }
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: LedgerException.LocalStorage) {
             InitializationState.Error(error).also { mutableState.value = it }
         } catch (error: Exception) {

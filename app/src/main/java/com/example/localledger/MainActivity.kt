@@ -39,13 +39,20 @@ fun LocalLedgerApp(appSession: AppSession) {
 
     LocalLedgerTheme(themeMode = session.themeMode) {
         when {
-            !session.isReady -> when (val init = session.initialization) {
-                InitializationState.Initializing -> InitializationLoadingScreen()
-                is InitializationState.Error -> InitializationErrorScreen(
-                    message = init.error.message ?: "本地数据存储不可用",
-                    onRetry = { scope.launch { appSession.retryInitialization() } },
-                )
-                is InitializationState.Ready -> InitializationLoadingScreen()
+            !session.isReady -> {
+                val init = session.initialization
+                val ledgerError = session.ledgerError
+                when {
+                    init is InitializationState.Error -> InitializationErrorScreen(
+                        message = init.error.message ?: "本地数据存储不可用",
+                        onRetry = { scope.launch { appSession.retryInitialization() } },
+                    )
+                    ledgerError != null -> InitializationErrorScreen(
+                        message = ledgerError.message ?: "本地数据存储不可用",
+                        onRetry = { scope.launch { appSession.retryInitialization() } },
+                    )
+                    else -> InitializationLoadingScreen()
+                }
             }
             session.showDataLossNotice -> DataLossNoticeScreen(
                 onAcknowledge = { scope.launch { appSession.acknowledgeDataLoss() } },

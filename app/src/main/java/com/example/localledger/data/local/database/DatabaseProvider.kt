@@ -5,6 +5,7 @@ import androidx.room.Room
 import com.example.localledger.core.storage.LocalStorageManager
 import com.example.localledger.domain.error.LedgerException
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -12,15 +13,19 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
+fun interface WalletDatabaseSource {
+    suspend fun get(): WalletDatabase
+}
+
 @Singleton
 class DatabaseProvider @Inject constructor(
     @ApplicationContext private val context: Context,
     private val storageManager: LocalStorageManager,
-) {
+) : WalletDatabaseSource {
     @Volatile private var instance: WalletDatabase? = null
     private val mutex = Mutex()
 
-    suspend fun get(): WalletDatabase = instance ?: mutex.withLock {
+    override suspend fun get(): WalletDatabase = instance ?: mutex.withLock {
         instance ?: createDatabase().also { instance = it }
     }
 
@@ -35,6 +40,8 @@ class DatabaseProvider @Inject constructor(
                 .addMigrations(*WalletDatabase.MIGRATIONS)
                 .addCallback(WalletDatabase.INTEGRITY_CALLBACK)
                 .build()
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: LedgerException.LocalStorage) {
             throw error
         } catch (error: Exception) {
