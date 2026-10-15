@@ -1,5 +1,7 @@
 package com.example.localledger.di
 
+import com.example.localledger.data.local.database.DatabaseProvider
+import com.example.localledger.data.local.database.WalletDatabaseSource
 import com.example.localledger.data.repository.AccountRepositoryImpl
 import com.example.localledger.data.repository.CategoryRepositoryImpl
 import com.example.localledger.data.repository.LedgerRepositoryImpl
@@ -17,6 +19,9 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import android.util.Log
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -31,6 +36,9 @@ annotation class ApplicationScope
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class RepositoryModule {
+    @Binds @Singleton
+    abstract fun walletDatabaseSource(impl: DatabaseProvider): WalletDatabaseSource
+
     @Binds abstract fun ledgerRepository(impl: LedgerRepositoryImpl): LedgerRepository
     @Binds abstract fun accountRepository(impl: AccountRepositoryImpl): AccountRepository
     @Binds abstract fun categoryRepository(impl: CategoryRepositoryImpl): CategoryRepository
@@ -49,5 +57,11 @@ object BackendModule {
     @Provides
     @Singleton
     @ApplicationScope
-    fun applicationScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    fun applicationScope(): CoroutineScope {
+        val handler = CoroutineExceptionHandler { _, error ->
+            if (error is CancellationException) return@CoroutineExceptionHandler
+            Log.e("LocalLedger", "未捕获的协程异常", error)
+        }
+        return CoroutineScope(SupervisorJob() + Dispatchers.Default + handler)
+    }
 }

@@ -1,6 +1,6 @@
 package com.example.localledger.data.repository
 
-import com.example.localledger.data.local.database.DatabaseProvider
+import com.example.localledger.data.local.database.WalletDatabaseSource
 import com.example.localledger.data.mapper.toDomain
 import com.example.localledger.domain.error.LedgerException
 import com.example.localledger.domain.model.CategoryTotal
@@ -23,7 +23,7 @@ import javax.inject.Singleton
 
 @Singleton
 class StatisticsRepositoryImpl @Inject constructor(
-    private val databaseProvider: DatabaseProvider,
+    private val databaseProvider: WalletDatabaseSource,
     private val dateRangeResolver: DateRangeResolver,
 ) : StatisticsRepository {
     override fun observeSummary(
