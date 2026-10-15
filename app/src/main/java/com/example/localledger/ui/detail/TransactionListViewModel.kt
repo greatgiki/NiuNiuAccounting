@@ -7,7 +7,6 @@ import com.example.localledger.domain.error.LedgerException
 import com.example.localledger.domain.model.Account
 import com.example.localledger.domain.model.Category
 import com.example.localledger.domain.model.CategoryType
-import com.example.localledger.domain.model.StatisticsPeriod
 import com.example.localledger.domain.model.TransactionDetail
 import com.example.localledger.domain.model.TransactionFilter
 import com.example.localledger.domain.model.TransactionType
@@ -74,7 +73,7 @@ sealed interface TransactionListEffect {
 @HiltViewModel
 class TransactionListViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
-    appSession: AppSession,
+    private val appSession: AppSession,
     private val transactionRepository: TransactionRepository,
     private val deleteTransactionUseCase: DeleteTransactionUseCase,
     accountRepository: AccountRepository,
@@ -196,9 +195,10 @@ class TransactionListViewModel @Inject constructor(
     }
 
     fun deleteTransaction(transactionId: String) {
+        val ledgerId = appSession.state.value.currentLedgerId ?: return
         viewModelScope.launch {
             try {
-                deleteTransactionUseCase(transactionId)
+                deleteTransactionUseCase(ledgerId, transactionId)
             } catch (error: LedgerException) {
                 effectChannel.send(
                     TransactionListEffect.ShowMessage(error.message ?: "删除失败"),
@@ -208,17 +208,7 @@ class TransactionListViewModel @Inject constructor(
     }
 
     private fun resolveRange(filter: TransactionListFilter) =
-        if (filter.startDate != null && filter.endDate != null) {
-            try {
-                dateRangeResolver.resolve(
-                    StatisticsPeriod.Custom(filter.startDate, filter.endDate),
-                )
-            } catch (error: LedgerException) {
-                null
-            }
-        } else {
-            null
-        }
+        dateRangeResolver.resolveOptional(filter.startDate, filter.endDate)
 
     private fun groupByDate(list: List<TransactionDetail>): List<TransactionDayGroup> =
         list.groupBy { detail ->

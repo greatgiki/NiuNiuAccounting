@@ -1,7 +1,7 @@
 package com.example.localledger.data.repository
 
 import androidx.room.withTransaction
-import com.example.localledger.data.local.database.DatabaseProvider
+import com.example.localledger.data.local.database.WalletDatabaseSource
 import com.example.localledger.data.local.database.PresetData
 import com.example.localledger.data.mapper.toDomain
 import com.example.localledger.data.mapper.toEntity
@@ -19,7 +19,7 @@ import javax.inject.Singleton
 
 @Singleton
 class LedgerRepositoryImpl @Inject constructor(
-    private val databaseProvider: DatabaseProvider,
+    private val databaseProvider: WalletDatabaseSource,
     private val clock: Clock,
 ) : LedgerRepository {
     override fun observeLedgers(): Flow<List<Ledger>> = flow {

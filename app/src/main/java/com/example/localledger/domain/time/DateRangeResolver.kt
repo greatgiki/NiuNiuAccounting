@@ -39,6 +39,24 @@ class DateRangeResolver @Inject constructor(
 
     fun year(year: Int): DateTimeRange = resolve(StatisticsPeriod.Year(year))
 
+    fun resolveOptional(startDate: LocalDate?, endDate: LocalDate?): DateTimeRange? {
+        if (startDate == null && endDate == null) return null
+        if (startDate != null && endDate != null) {
+            return resolve(StatisticsPeriod.Custom(startDate, endDate))
+        }
+        if (startDate != null) {
+            return DateTimeRange(
+                startInclusive = resolve(StatisticsPeriod.Day(startDate)).startInclusive,
+                endExclusive = Long.MAX_VALUE,
+            )
+        }
+        val end = endDate ?: return null
+        return DateTimeRange(
+            startInclusive = Long.MIN_VALUE,
+            endExclusive = resolve(StatisticsPeriod.Day(end)).endExclusive,
+        )
+    }
+
     fun zoneId(): ZoneId = zoneIdProvider.current()
 
     private fun range(start: LocalDate, endExclusive: LocalDate): DateTimeRange {

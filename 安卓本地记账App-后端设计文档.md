@@ -266,7 +266,7 @@ interface StatisticsRepository {
 
 Repository 对外暴露领域模型，不泄露 Room Entity、DAO 或 SQL 类型。
 
-注：以上 `deleteTransaction(ledgerId, transactionId)` 为目标签名；当前代码仍为 `deleteTransaction(transactionId)`，接口、Use Case 与调用方待同步修改。
+`deleteTransaction(ledgerId, transactionId)` 已按该签名实现。SQL 使用 `id` 与 `ledger_id` 共同定位，不属于指定账本时按流水不存在处理。
 
 ## 7. 写入用例与事务
 
@@ -304,7 +304,7 @@ Repository 对外暴露领域模型，不泄露 Room Entity、DAO 或 SQL 类型
 3. 执行 `DELETE FROM transactions WHERE id = :transactionId AND ledger_id = :ledgerId`。
 4. 返回删除结果。
 
-删除必须携带账本 ID 是本设计账本隔离原则的一部分：仅持有全局 ID 不足以删除记录。（已定决策，`deleteTransaction` 签名与代码待同步修改）
+删除必须携带账本 ID 是本设计账本隔离原则的一部分：仅持有全局 ID 不足以删除记录。
 
 删除不可撤销，不设置 `deleted_at`，不保留回收站。UI 负责二次确认；Use Case 不假设 UI 一定完成了确认。
 
@@ -440,7 +440,7 @@ SQLite 的 UTC 时间戳不能直接可靠地按用户本地日历聚合。MVP �
 - 每个 Migration 需要从旧版本真实数据库文件升级的测试。
 - 初始预置数据只在数据库为空时插入，且使用固定或可识别的 UUID，避免升级或重启时重复插入。
 - 外键约束应开启，并优先使用 `RESTRICT` 防止误删仍被历史流水引用的账户、分类或账本。
-- 账户、分类的 `ledger_id` 必须由 `BEFORE UPDATE OF ledger_id` 触发器保护：新旧值不同时 `RAISE(ABORT)`，在数据库层强制账本归属不可变，不依赖 Repository 自觉。（已定决策，代码与测试待实现）
+- 账户、分类的 `ledger_id` 由 `BEFORE UPDATE OF ledger_id` 触发器保护：新旧值不同时 `RAISE(ABORT)`，在数据库层强制账本归属不可变。触发器在每次打开数据库时安装，不改变 Room 表结构，因此仍为 Schema v1。
 - 每个写入异常必须向上层返回可展示的领域错误，不允许吞掉 SQLite 异常。
 
 ## 11. 后端测试
