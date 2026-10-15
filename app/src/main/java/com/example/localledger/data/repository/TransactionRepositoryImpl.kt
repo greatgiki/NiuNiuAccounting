@@ -1,7 +1,7 @@
 package com.example.localledger.data.repository
 
 import androidx.room.withTransaction
-import com.example.localledger.data.local.database.DatabaseProvider
+import com.example.localledger.data.local.database.WalletDatabaseSource
 import com.example.localledger.data.local.entity.TransactionEntity
 import com.example.localledger.data.mapper.toDomain
 import com.example.localledger.domain.error.LedgerException
@@ -22,7 +22,7 @@ import javax.inject.Singleton
 
 @Singleton
 class TransactionRepositoryImpl @Inject constructor(
-    private val databaseProvider: DatabaseProvider,
+    private val databaseProvider: WalletDatabaseSource,
     private val clock: Clock,
 ) : TransactionRepository {
     override fun observeTransaction(transactionId: String): Flow<TransactionDetail?> = flow {
@@ -109,12 +109,12 @@ class TransactionRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun deleteTransaction(transactionId: String) = writeOperation {
+    override suspend fun deleteTransaction(ledgerId: String, transactionId: String) = writeOperation {
         val database = databaseProvider.get()
         database.withTransaction {
-            database.transactionDao().findById(transactionId)
+            database.transactionDao().findByIdInLedger(transactionId, ledgerId)
                 ?: throw LedgerException.TransactionNotFound()
-            if (database.transactionDao().deleteById(transactionId) != 1) {
+            if (database.transactionDao().deleteById(transactionId, ledgerId) != 1) {
                 throw LedgerException.TransactionNotFound()
             }
         }

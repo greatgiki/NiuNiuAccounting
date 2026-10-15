@@ -39,6 +39,3 @@
 
 Room Schema 导出到 `app/schemas/`。当前是初始 Schema v1，因此没有历史版本 Migration；
 后续每次修改 Schema 都应提升数据库版本、加入显式 Migration，并以导出的旧 Schema 编写升级测试。
-=======
-
-牛牛牛捏

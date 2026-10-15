@@ -113,6 +113,28 @@ abstract class WalletDatabase : RoomDatabase() {
                 END
                 """.trimIndent(),
             )
+            db.execSQL(
+                """
+                CREATE TRIGGER IF NOT EXISTS prevent_account_ledger_change
+                BEFORE UPDATE OF ledger_id ON accounts
+                FOR EACH ROW
+                WHEN NEW.ledger_id != OLD.ledger_id
+                BEGIN
+                    SELECT RAISE(ABORT, 'cannot change account ledger');
+                END
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                CREATE TRIGGER IF NOT EXISTS prevent_category_ledger_change
+                BEFORE UPDATE OF ledger_id ON categories
+                FOR EACH ROW
+                WHEN NEW.ledger_id != OLD.ledger_id
+                BEGIN
+                    SELECT RAISE(ABORT, 'cannot change category ledger');
+                END
+                """.trimIndent(),
+            )
         }
     }
 }

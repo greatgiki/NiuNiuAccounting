@@ -121,11 +121,8 @@ fun TransactionListScreen(
                         Spacer(Modifier.padding(2.dp))
                     }
                 }
-                if (filter.startDate != null && filter.endDate != null) {
-                    FilterChipLabel(
-                        "${DateTimeFormatters.date(filter.startDate)} ~ " +
-                            DateTimeFormatters.date(filter.endDate),
-                    )
+                if (filter.startDate != null || filter.endDate != null) {
+                    FilterChipLabel(dateFilterLabel(filter.startDate, filter.endDate))
                     Spacer(Modifier.padding(2.dp))
                 }
                 TextButton(onClick = viewModel::clearFilter) { Text("清空筛选") }
@@ -217,6 +214,14 @@ fun TransactionListScreen(
 @Composable
 private fun FilterChipLabel(text: String) {
     AssistChip(onClick = {}, label = { Text(text, style = MaterialTheme.typography.bodySmall) })
+}
+
+private fun dateFilterLabel(startDate: LocalDate?, endDate: LocalDate?): String = when {
+    startDate != null && endDate != null ->
+        "${DateTimeFormatters.date(startDate)} ~ ${DateTimeFormatters.date(endDate)}"
+    startDate != null -> "${DateTimeFormatters.date(startDate)} 起"
+    endDate != null -> "至 ${DateTimeFormatters.date(endDate)}"
+    else -> ""
 }
 
 fun typeLabel(type: TransactionType): String = when (type) {
@@ -366,39 +371,53 @@ private fun FilterSheet(
     }
 
     if (pickingStart) {
+        val pickerState = rememberDatePickerState(
+            initialSelectedDateMillis = (startDate ?: LocalDate.now())
+                .atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli(),
+        )
         DatePickerDialog(
             onDismissRequest = { pickingStart = false },
-            confirmButton = { TextButton(onClick = { pickingStart = false }) { Text("关闭") } },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pickerState.selectedDateMillis?.let { millis ->
+                            startDate = Instant.ofEpochMilli(millis)
+                                .atZone(ZoneId.of("UTC")).toLocalDate()
+                        }
+                        pickingStart = false
+                    },
+                ) { Text("确定") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pickingStart = false }) { Text("取消") }
+            },
         ) {
-            val pickerState = rememberDatePickerState(
-                initialSelectedDateMillis = (startDate ?: LocalDate.now())
-                    .atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli(),
-            )
-            LaunchedEffect(pickerState.selectedDateMillis) {
-                pickerState.selectedDateMillis?.let { millis ->
-                    startDate = Instant.ofEpochMilli(millis)
-                        .atZone(ZoneId.of("UTC")).toLocalDate()
-                }
-            }
             DatePicker(state = pickerState)
         }
     }
 
     if (pickingEnd) {
+        val pickerState = rememberDatePickerState(
+            initialSelectedDateMillis = (endDate ?: LocalDate.now())
+                .atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli(),
+        )
         DatePickerDialog(
             onDismissRequest = { pickingEnd = false },
-            confirmButton = { TextButton(onClick = { pickingEnd = false }) { Text("关闭") } },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pickerState.selectedDateMillis?.let { millis ->
+                            endDate = Instant.ofEpochMilli(millis)
+                                .atZone(ZoneId.of("UTC")).toLocalDate()
+                        }
+                        pickingEnd = false
+                    },
+                ) { Text("确定") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pickingEnd = false }) { Text("取消") }
+            },
         ) {
-            val pickerState = rememberDatePickerState(
-                initialSelectedDateMillis = (endDate ?: LocalDate.now())
-                    .atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli(),
-            )
-            LaunchedEffect(pickerState.selectedDateMillis) {
-                pickerState.selectedDateMillis?.let { millis ->
-                    endDate = Instant.ofEpochMilli(millis)
-                        .atZone(ZoneId.of("UTC")).toLocalDate()
-                }
-            }
             DatePicker(state = pickerState)
         }
     }

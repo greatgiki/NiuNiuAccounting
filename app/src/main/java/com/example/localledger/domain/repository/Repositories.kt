@@ -44,7 +44,7 @@ interface TransactionRepository {
     ): Flow<List<TransactionDetail>>
 
     suspend fun saveTransaction(command: SaveTransactionCommand): String
-    suspend fun deleteTransaction(transactionId: String)
+    suspend fun deleteTransaction(ledgerId: String, transactionId: String)
 }
 
 interface StatisticsRepository {

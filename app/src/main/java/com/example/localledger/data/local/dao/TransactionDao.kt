@@ -19,8 +19,11 @@ interface TransactionDao {
     @Upsert
     suspend fun upsert(entity: TransactionEntity)
 
-    @Query("DELETE FROM transactions WHERE id = :id")
-    suspend fun deleteById(id: String): Int
+    @Query("SELECT * FROM transactions WHERE id = :id AND ledger_id = :ledgerId")
+    suspend fun findByIdInLedger(id: String, ledgerId: String): TransactionEntity?
+
+    @Query("DELETE FROM transactions WHERE id = :id AND ledger_id = :ledgerId")
+    suspend fun deleteById(id: String, ledgerId: String): Int
 
     @Query(
         """

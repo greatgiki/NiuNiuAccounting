@@ -62,7 +62,7 @@ class WalletDatabaseTest {
         seedLedger("ledger-a")
         val now = 1_700_000_000_000L
         insertTransaction("expense", TransactionType.EXPENSE, 2_500, "account-a", null, "expense-a", now)
-        assertEquals(1, database.transactionDao().deleteById("expense"))
+        assertEquals(1, database.transactionDao().deleteById("expense", "ledger-a"))
 
         val balance = database.accountDao().observeBalances("ledger-a").first()
             .single { it.account.id == "account-a" }
@@ -107,6 +107,42 @@ class WalletDatabaseTest {
             900L,
             database.transactionDao().observeSummary("ledger-b", now, now + 1).first().incomeMinor,
         )
+    }
+
+    @Test
+    fun deleteWithAnotherLedgerIdLeavesTheTransaction() = runTest {
+        seedLedger("ledger-a")
+        seedLedger("ledger-b", "-b")
+        val now = 1_700_000_000_000L
+        insertTransaction("expense", TransactionType.EXPENSE, 2_500, "account-a", null, "expense-a", now)
+
+        assertEquals(0, database.transactionDao().deleteById("expense", "ledger-b"))
+        assertNotNull(database.transactionDao().findById("expense"))
+        assertEquals(1, database.transactionDao().deleteById("expense", "ledger-a"))
+        assertEquals(null, database.transactionDao().findById("expense"))
+    }
+
+    @Test
+    fun databaseTriggerRejectsLedgerIdChange() = runTest {
+        seedLedger("ledger-a")
+        seedLedger("ledger-b", "-b")
+        val account = database.accountDao().findById("account-a")
+        val category = database.categoryDao().findById("expense-a")
+        assertNotNull(account)
+        assertNotNull(category)
+
+        assertNotNull(
+            runCatching {
+                database.accountDao().upsert(account!!.copy(ledgerId = "ledger-b"))
+            }.exceptionOrNull(),
+        )
+        assertNotNull(
+            runCatching {
+                database.categoryDao().upsert(category!!.copy(ledgerId = "ledger-b"))
+            }.exceptionOrNull(),
+        )
+        assertEquals("ledger-a", database.accountDao().findById("account-a")!!.ledgerId)
+        assertEquals("ledger-a", database.categoryDao().findById("expense-a")!!.ledgerId)
     }
 
     @Test

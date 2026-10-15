@@ -41,6 +41,43 @@ class DateRangeResolverTest {
         assertEquals(Instant.parse("2026-07-21T16:00:00Z").toEpochMilli(), range.endExclusive)
     }
 
+    @Test
+    fun oneSidedStartIsOpenEnded() {
+        val range = resolver.resolveOptional(LocalDate.of(2026, 7, 21), null)!!
+
+        assertEquals(Instant.parse("2026-07-20T16:00:00Z").toEpochMilli(), range.startInclusive)
+        assertEquals(Long.MAX_VALUE, range.endExclusive)
+    }
+
+    @Test
+    fun oneSidedEndIncludesTheWholeEndDate() {
+        val range = resolver.resolveOptional(null, LocalDate.of(2026, 7, 21))!!
+
+        assertEquals(Long.MIN_VALUE, range.startInclusive)
+        assertEquals(Instant.parse("2026-07-21T16:00:00Z").toEpochMilli(), range.endExclusive)
+    }
+
+    @Test
+    fun missingBoundsDoNotCreateARange() {
+        assertEquals(null, resolver.resolveOptional(null, null))
+    }
+
+    @Test
+    fun bothBoundsMatchTheCustomRange() {
+        val start = LocalDate.of(2026, 7, 1)
+        val end = LocalDate.of(2026, 7, 21)
+
+        assertEquals(
+            resolver.resolve(StatisticsPeriod.Custom(start, end)),
+            resolver.resolveOptional(start, end),
+        )
+    }
+
+    @Test(expected = LedgerException.InvalidDateRange::class)
+    fun rejectsReversedOptionalRange() {
+        resolver.resolveOptional(LocalDate.of(2026, 7, 22), LocalDate.of(2026, 7, 21))
+    }
+
     @Test(expected = LedgerException.InvalidDateRange::class)
     fun rejectsReversedCustomRange() {
         resolver.resolve(
