@@ -1,5 +1,6 @@
 package com.example.localledger.domain.model
 
+import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.YearMonth
 
@@ -22,6 +23,7 @@ data class Account(
     val ledgerId: String,
     val name: String,
     val type: AccountType,
+    val currencyCode: String = "CNY",
     val initialBalanceMinor: Long = 0,
     val sortOrder: Int = 0,
     val isArchived: Boolean = false,
@@ -53,6 +55,9 @@ data class Transaction(
     val note: String?,
     val createdAt: Long,
     val updatedAt: Long,
+    val toAmountMinor: Long? = null,
+    val baseAmountMinor: Long = amountMinor,
+    val fxRate: String = "1",
 )
 
 data class AccountBalance(
@@ -66,6 +71,8 @@ data class TransactionDetail(
     val toAccountName: String?,
     val categoryName: String?,
     val categoryIconKey: String?,
+    val accountCurrencyCode: String = "CNY",
+    val toAccountCurrencyCode: String? = null,
 )
 
 data class DateTimeRange(
@@ -103,6 +110,8 @@ data class SaveTransactionCommand(
     val categoryId: String? = null,
     val transactionAt: Long,
     val note: String? = null,
+    /** 转入金额，币种为转入账户。为空时按汇率或同币种原金额计算。 */
+    val toAmountMinor: Long? = null,
 )
 
 data class IncomeExpenseSummary(
@@ -130,5 +139,49 @@ data class MonthlyTotal(
     val yearMonth: YearMonth,
     val incomeMinor: Long,
     val expenseMinor: Long,
+)
+
+enum class RecurrencePeriod { DAILY, WEEKLY, MONTHLY, YEARLY }
+
+data class Budget(
+    val id: String,
+    val ledgerId: String,
+    val yearMonth: YearMonth,
+    val categoryId: String?,
+    val amountMinor: Long,
+    val createdAt: Long,
+    val updatedAt: Long,
+    val categoryName: String? = null,
+)
+
+data class RecurringRule(
+    val id: String,
+    val ledgerId: String,
+    val type: TransactionType,
+    val amountMinor: Long,
+    val toAmountMinor: Long?,
+    val accountId: String,
+    val toAccountId: String?,
+    val categoryId: String?,
+    val note: String?,
+    val period: RecurrencePeriod,
+    val startDate: LocalDate,
+    val endDate: LocalDate?,
+    val nextRunDate: LocalDate,
+    val paused: Boolean,
+    val createdAt: Long,
+    val updatedAt: Long,
+    val accountCurrencyCode: String = "CNY",
+    val accountName: String = "",
+    val toAccountName: String? = null,
+    val categoryName: String? = null,
+)
+
+data class ExchangeRateSnapshot(
+    val baseCode: String,
+    /** 1 单位本位币可兑换的报价币数量，与 Frankfurter `from=base` 的 rates 一致。 */
+    val quotesPerUnit: Map<String, BigDecimal>,
+    val fetchedAt: Long,
+    val source: String,
 )
 

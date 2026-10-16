@@ -28,7 +28,9 @@ import com.example.localledger.domain.model.CategoryType
 import com.example.localledger.domain.model.TransactionType
 import com.example.localledger.ui.AppSession
 import com.example.localledger.ui.account.AccountManageScreen
+import com.example.localledger.ui.budget.BudgetManageScreen
 import com.example.localledger.ui.category.CategoryManageScreen
+import com.example.localledger.ui.recurring.RecurringRuleScreen
 import com.example.localledger.ui.detail.TransactionListScreen
 import com.example.localledger.ui.editor.TransactionEditorScreen
 import com.example.localledger.ui.home.HomeScreen
@@ -44,6 +46,8 @@ object Routes {
     const val SETTINGS = "settings"
     const val LEDGERS = "ledgers"
     const val ACCOUNTS = "accounts"
+    const val BUDGETS = "budgets"
+    const val RECURRING = "recurring"
     const val TRANSACTIONS_PATTERN =
         "transactions?type={type}&categoryId={categoryId}&accountId={accountId}" +
             "&startDate={startDate}&endDate={endDate}"
@@ -191,6 +195,12 @@ fun AppNavHost(appSession: AppSession) {
             }
             composable(Routes.ACCOUNTS) {
                 AccountManageScreen(appSession = appSession, navController = navController)
+            }
+            composable(Routes.BUDGETS) {
+                BudgetManageScreen(navController = navController)
+            }
+            composable(Routes.RECURRING) {
+                RecurringRuleScreen(navController = navController)
             }
             composable(
                 route = Routes.CATEGORIES,

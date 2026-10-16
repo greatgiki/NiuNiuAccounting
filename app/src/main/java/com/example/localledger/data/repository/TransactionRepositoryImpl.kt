@@ -10,6 +10,9 @@ import com.example.localledger.domain.model.SaveTransactionCommand
 import com.example.localledger.domain.model.TransactionDetail
 import com.example.localledger.domain.model.TransactionFilter
 import com.example.localledger.domain.model.TransactionType
+import com.example.localledger.domain.money.CurrencyCatalog
+import com.example.localledger.domain.money.CurrencyConverter
+import com.example.localledger.domain.repository.ExchangeRateRepository
 import com.example.localledger.domain.repository.TransactionRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
@@ -23,6 +26,7 @@ import javax.inject.Singleton
 @Singleton
 class TransactionRepositoryImpl @Inject constructor(
     private val databaseProvider: WalletDatabaseSource,
+    private val exchangeRates: ExchangeRateRepository,
     private val clock: Clock,
 ) : TransactionRepository {
     override fun observeTransaction(transactionId: String): Flow<TransactionDetail?> = flow {
@@ -88,6 +92,24 @@ class TransactionRepositoryImpl @Inject constructor(
                 throw LedgerException.TransactionLedgerMismatch()
             }
 
+            val sourceCurrency = CurrencyCatalog.of(source.currencyCode).code
+            val ledgerCurrency = CurrencyCatalog.of(ledger.currencyCode).code
+            val destinationCurrency = destination?.let { CurrencyCatalog.of(it.currencyCode).code }
+            val needsRate = sourceCurrency != ledgerCurrency ||
+                (destinationCurrency != null && destinationCurrency != sourceCurrency && command.toAmountMinor == null)
+            val snapshot = if (needsRate) exchangeRates.get(ledgerCurrency) else null
+            val baseAmount = CurrencyConverter.toBaseMinor(
+                command.amountMinor,
+                sourceCurrency,
+                ledgerCurrency,
+                snapshot,
+            )
+            if (baseAmount <= 0L) throw LedgerException.InvalidAmount()
+            val toAmount = resolveToAmount(command, sourceCurrency, destinationCurrency, ledgerCurrency, snapshot)
+            val fxRate = CurrencyConverter.formatRate(
+                CurrencyConverter.basePerAccountUnit(sourceCurrency, ledgerCurrency, snapshot),
+            )
+
             val id = existing?.id ?: UUID.randomUUID().toString()
             val now = clock.millis()
             database.transactionDao().upsert(
@@ -103,11 +125,17 @@ class TransactionRepositoryImpl @Inject constructor(
                     note = command.note?.trim()?.takeIf { it.isNotEmpty() },
                     createdAt = existing?.createdAt ?: now,
                     updatedAt = now,
+                    toAmountMinor = toAmount,
+                    baseAmountMinor = baseAmount,
+                    fxRate = fxRate,
                 ),
             )
             id
         }
     }
+
+    override suspend fun contains(transactionId: String): Boolean =
+        databaseProvider.get().transactionDao().findById(transactionId) != null
 
     override suspend fun deleteTransaction(ledgerId: String, transactionId: String) = writeOperation {
         val database = databaseProvider.get()
@@ -129,13 +157,43 @@ class TransactionRepositoryImpl @Inject constructor(
                 }
             }
             TransactionType.TRANSFER -> {
-                if (command.toAccountId == null || command.categoryId != null) {
-                    throw LedgerException.InvalidTransactionType()
+                if (command.toAccountId == null || command.categoryId != null || command.toAmountMinor != null && command.toAmountMinor <= 0) {
+                    throw if (command.toAmountMinor != null && command.toAmountMinor <= 0) {
+                        LedgerException.InvalidAmount()
+                    } else {
+                        LedgerException.InvalidTransactionType()
+                    }
                 }
                 if (command.accountId == command.toAccountId) {
                     throw LedgerException.SameTransferAccount()
                 }
             }
+        }
+        if (command.type != TransactionType.TRANSFER && command.toAmountMinor != null) {
+            throw LedgerException.InvalidTransactionType()
+        }
+    }
+
+    private fun resolveToAmount(
+        command: SaveTransactionCommand,
+        sourceCurrency: String,
+        destinationCurrency: String?,
+        ledgerCurrency: String,
+        snapshot: com.example.localledger.domain.model.ExchangeRateSnapshot?,
+    ): Long? {
+        if (command.type != TransactionType.TRANSFER) return null
+        command.toAmountMinor?.let { return it }
+        val destination = destinationCurrency ?: throw LedgerException.InvalidTransactionType()
+        return if (destination == sourceCurrency) {
+            command.amountMinor
+        } else {
+            CurrencyConverter.betweenAccounts(
+                command.amountMinor,
+                sourceCurrency,
+                destination,
+                ledgerCurrency,
+                snapshot,
+            ).also { if (it <= 0L) throw LedgerException.InvalidAmount() }
         }
     }
 

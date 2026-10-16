@@ -2,6 +2,7 @@ package com.example.localledger.ui.statistics
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -50,7 +51,10 @@ import androidx.navigation.NavHostController
 import com.example.localledger.domain.model.StatisticsPeriod
 import com.example.localledger.domain.model.TransactionType
 import com.example.localledger.ui.AppSession
+import com.example.localledger.domain.money.RatioMath
 import com.example.localledger.ui.common.CategoryIcons
+import com.example.localledger.ui.common.MoneyFormatter
+import com.example.localledger.ui.home.BudgetProgressRow
 import com.example.localledger.ui.component.EmptyState
 import com.example.localledger.ui.component.ErrorState
 import com.example.localledger.ui.component.LoadingState
@@ -101,18 +105,63 @@ fun StatisticsScreen(
                     incomeMinor = state.incomeMinor,
                     expenseMinor = state.expenseMinor,
                     modifier = Modifier.padding(16.dp),
+                    currencyCode = state.currencyCode,
                 )
+            }
+
+            if (state.budgets.isNotEmpty()) {
+                SectionTitle("本月预算")
+                state.budgets.forEach { line ->
+                    BudgetProgressRow(line, state.currencyCode)
+                }
             }
 
             SectionTitle("支出分类")
             if (state.categories.isEmpty()) {
                 EmptyState("当前时间范围内没有支出")
             } else {
+                var expanded by remember { mutableStateOf(false) }
+                val shown = if (expanded || state.categories.size <= 8) {
+                    state.categories
+                } else {
+                    state.categories.take(8)
+                }
+                ExpenseShareChart(
+                    categories = state.categories,
+                    currencyCode = state.currencyCode,
+                )
                 ExpenseCategoryBars(
-                    categories = state.categories.take(8),
-                    totalMinor = state.categories.sumOf { it.amountMinor },
+                    categories = shown,
+                    totalMinor = state.categories.fold(0L) { acc, item -> Math.addExact(acc, item.amountMinor) },
+                    currencyCode = state.currencyCode,
                     onCategoryClick = { categoryId ->
                         navigateToRangeDetail(navController, state.period, categoryId)
+                    },
+                )
+                if (state.categories.size > 8) {
+                    TextButton(onClick = { expanded = !expanded }) {
+                        Text(if (expanded) "收起" else "展开全部（${state.categories.size}）")
+                    }
+                }
+            }
+
+            SectionTitle("收入分类")
+            if (state.incomeCategories.isEmpty()) {
+                EmptyState("当前时间范围内没有收入")
+            } else {
+                ExpenseCategoryBars(
+                    categories = state.incomeCategories,
+                    totalMinor = state.incomeCategories.fold(0L) { acc, item -> Math.addExact(acc, item.amountMinor) },
+                    currencyCode = state.currencyCode,
+                    barColor = androidx.compose.ui.graphics.Color(0xFF2F6F4E),
+                    onCategoryClick = { categoryId ->
+                        val (start, end) = periodDates(state.period)
+                        navController.navigateToTransactions(
+                            type = TransactionType.INCOME,
+                            categoryId = categoryId,
+                            startDate = start,
+                            endDate = end,
+                        )
                     },
                 )
             }
@@ -149,7 +198,10 @@ fun StatisticsScreen(
                             modifier = Modifier.weight(1f),
                             maxLines = 1,
                         )
-                        MoneyText(amountMinor = balance.balanceMinor)
+                        MoneyText(
+                            amountMinor = balance.balanceMinor,
+                            currencyCode = balance.account.currencyCode,
+                        )
                     }
                     HorizontalDivider()
                 }
@@ -169,6 +221,13 @@ fun StatisticsScreen(
             },
         )
     }
+}
+
+private fun periodDates(period: StatisticsPeriod): Pair<LocalDate, LocalDate> = when (period) {
+    is StatisticsPeriod.Day -> period.date to period.date
+    is StatisticsPeriod.Month -> period.yearMonth.atDay(1) to period.yearMonth.atEndOfMonth()
+    is StatisticsPeriod.Year -> LocalDate.of(period.year, 1, 1) to LocalDate.of(period.year, 12, 31)
+    is StatisticsPeriod.Custom -> period.startDate to period.endDate
 }
 
 private fun navigateToRangeDetail(
@@ -325,18 +384,76 @@ private fun PeriodPickerDialog(
 }
 
 @Composable
+private fun ExpenseShareChart(
+    categories: List<com.example.localledger.domain.model.CategoryTotal>,
+    currencyCode: String,
+) {
+    val total = categories.fold(0L) { acc, item -> Math.addExact(acc, item.amountMinor) }
+    val slices = if (categories.size <= 8) {
+        categories.map { it.categoryName to it.amountMinor }
+    } else {
+        val rest = categories.drop(7).fold(0L) { acc, item -> Math.addExact(acc, item.amountMinor) }
+        categories.take(7).map { it.categoryName to it.amountMinor } + ("其他" to rest)
+    }
+    val colors = listOf(
+        androidx.compose.ui.graphics.Color(0xFFC4392F),
+        androidx.compose.ui.graphics.Color(0xFFD97706),
+        androidx.compose.ui.graphics.Color(0xFF2F6F4E),
+        androidx.compose.ui.graphics.Color(0xFF2563EB),
+        androidx.compose.ui.graphics.Color(0xFF7C3AED),
+        androidx.compose.ui.graphics.Color(0xFF0F766E),
+        androidx.compose.ui.graphics.Color(0xFFBE185D),
+        androidx.compose.ui.graphics.Color(0xFF64748B),
+    )
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Canvas(
+            modifier = Modifier.size(112.dp).semantics {
+                contentDescription = "支出分类占比，共${slices.size}项"
+            },
+        ) {
+            var start = -90f
+            slices.forEachIndexed { index, (_, amount) ->
+                val sweep = RatioMath.fraction(amount, total) * 360f
+                drawArc(
+                    color = colors[index % colors.size],
+                    startAngle = start,
+                    sweepAngle = sweep,
+                    useCenter = true,
+                )
+                start += sweep
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            slices.forEachIndexed { index, (name, amount) ->
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
+                    Canvas(modifier = Modifier.size(8.dp)) { drawRect(colors[index % colors.size]) }
+                    Spacer(Modifier.width(6.dp))
+                    Text(name, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), maxLines = 1)
+                    Text(
+                        "${RatioMath.percentLabel(amount, total)} ${MoneyFormatter.format(amount, currencyCode)}",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun ExpenseCategoryBars(
     categories: List<com.example.localledger.domain.model.CategoryTotal>,
     totalMinor: Long,
+    currencyCode: String,
+    barColor: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color(0xFFC4392F),
     onCategoryClick: (String) -> Unit,
 ) {
     Column {
         categories.forEach { category ->
-            val fraction = if (totalMinor > 0) {
-                category.amountMinor.toFloat() / totalMinor.toFloat()
-            } else {
-                0f
-            }
+            val fraction = RatioMath.fraction(category.amountMinor, totalMinor)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -360,7 +477,7 @@ private fun ExpenseCategoryBars(
                             maxLines = 1,
                         )
                         Text(
-                            "${(fraction * 100).toInt()}%",
+                            RatioMath.percentLabel(category.amountMinor, totalMinor),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -368,12 +485,13 @@ private fun ExpenseCategoryBars(
                         MoneyText(
                             amountMinor = category.amountMinor,
                             style = MaterialTheme.typography.bodyMedium,
+                            currencyCode = currencyCode,
                         )
                     }
                     Spacer(Modifier.height(4.dp))
                     Canvas(modifier = Modifier.fillMaxWidth().height(6.dp)) {
                         drawRect(
-                            color = androidx.compose.ui.graphics.Color(0xFFC4392F),
+                            color = barColor,
                             size = Size(size.width * fraction, size.height),
                         )
                     }
@@ -391,7 +509,8 @@ private fun IncomeExpenseTrendChart(
     val incomeColor = amountColor(TransactionType.INCOME)
     val expenseColor = amountColor(TransactionType.EXPENSE)
     val maxValue = points.maxOf { maxOf(it.incomeMinor, it.expenseMinor) }.coerceAtLeast(1)
-    val description = "收支趋势图，共${points.size}个时间点，点击查看对应明细"
+    val description = "收支趋势图，共${points.size}个时间点，可横向滑动，点击查看对应明细"
+    val scrollable = points.size > 8
 
     Column {
         Row(
@@ -403,7 +522,7 @@ private fun IncomeExpenseTrendChart(
         }
         Row(
             modifier = Modifier
-                .fillMaxWidth()
+                .then(if (scrollable) Modifier.horizontalScroll(rememberScrollState()) else Modifier.fillMaxWidth())
                 .height(160.dp)
                 .semantics { contentDescription = description },
             horizontalArrangement = Arrangement.spacedBy(2.dp),
@@ -411,7 +530,7 @@ private fun IncomeExpenseTrendChart(
         ) {
             points.forEach { point ->
                 Column(
-                    modifier = Modifier.weight(1f),
+                    modifier = if (scrollable) Modifier.width(36.dp) else Modifier.weight(1f),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Bottom,
                 ) {
@@ -443,7 +562,7 @@ private fun IncomeExpenseTrendChart(
 
 @Composable
 private fun TrendBar(value: Long, maxValue: Long, color: androidx.compose.ui.graphics.Color, onClick: () -> Unit) {
-    val fraction = if (maxValue > 0) value.toFloat() / maxValue.toFloat() else 0f
+    val fraction = RatioMath.fraction(value, maxValue)
     Canvas(
             modifier = Modifier
                 .width(6.dp)

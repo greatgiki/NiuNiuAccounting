@@ -42,7 +42,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import com.example.localledger.domain.model.Ledger
+import com.example.localledger.domain.money.CurrencyCatalog
 import com.example.localledger.ui.AppSession
+import com.example.localledger.ui.common.CurrencyChips
 import com.example.localledger.ui.component.ConfirmDeleteDialog
 import com.example.localledger.ui.home.SectionTitle
 
@@ -120,9 +122,9 @@ fun LedgerManageScreen(
         NameInputDialog(
             title = "新建账本",
             confirmLabel = "创建",
-            onConfirm = { name ->
+            onConfirm = { name, currency ->
                 showCreateDialog = false
-                viewModel.create(name)
+                viewModel.create(name, currency)
             },
             onDismiss = { showCreateDialog = false },
         )
@@ -130,12 +132,13 @@ fun LedgerManageScreen(
 
     renameTarget?.let { ledger ->
         NameInputDialog(
-            title = "修改账本名称",
+            title = "修改账本",
             initialValue = ledger.name,
+            initialCurrency = ledger.currencyCode,
             confirmLabel = "保存",
-            onConfirm = { name ->
+            onConfirm = { name, currency ->
                 renameTarget = null
-                viewModel.rename(ledger, name)
+                viewModel.rename(ledger, name, currency)
             },
             onDismiss = { renameTarget = null },
         )
@@ -172,13 +175,14 @@ private fun LedgerRow(
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(ledger.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
-            if (isCurrent) {
-                Text(
-                    "当前账本",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
+            Text(
+                buildString {
+                    append(currencyLabel(ledger.currencyCode))
+                    if (isCurrent) append(" · 当前账本")
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         IconButton(onClick = { menuExpanded = true }) {
             Icon(Icons.Default.MoreVert, contentDescription = "更多操作")
@@ -215,25 +219,37 @@ private fun LedgerRow(
 fun NameInputDialog(
     title: String,
     initialValue: String = "",
+    initialCurrency: String = "CNY",
     confirmLabel: String,
-    onConfirm: (String) -> Unit,
+    onConfirm: (String, String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var value by remember { mutableStateOf(initialValue) }
+    var currency by remember { mutableStateOf(initialCurrency) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            OutlinedTextField(
-                value = value,
-                onValueChange = { value = it.take(30) },
-                singleLine = true,
-                label = { Text("名称") },
-            )
+            Column {
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = { value = it.take(30) },
+                    singleLine = true,
+                    label = { Text("名称") },
+                )
+                Text("本位币", modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
+                CurrencyChips(selected = currency, onSelect = { currency = it })
+                Text(
+                    "汇总、统计和预算按本位币计算。已入账的历史金额不会按新汇率重算。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
         },
         confirmButton = {
             TextButton(
-                onClick = { onConfirm(value.trim()) },
+                onClick = { onConfirm(value.trim(), currency) },
                 enabled = value.isNotBlank(),
             ) { Text(confirmLabel) }
         },
@@ -242,3 +258,6 @@ fun NameInputDialog(
         },
     )
 }
+
+private fun currencyLabel(code: String): String =
+    CurrencyCatalog.supported.firstOrNull { it.code == code }?.let { "${it.label} ${it.code}" } ?: code

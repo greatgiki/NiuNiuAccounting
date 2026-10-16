@@ -47,6 +47,8 @@ import androidx.navigation.NavHostController
 import com.example.localledger.domain.model.Account
 import com.example.localledger.domain.model.AccountType
 import com.example.localledger.ui.AppSession
+import com.example.localledger.domain.money.CurrencyCatalog
+import com.example.localledger.ui.common.CurrencyChips
 import com.example.localledger.ui.common.MoneyFormatter
 import com.example.localledger.ui.component.ConfirmDeleteDialog
 import com.example.localledger.ui.component.EmptyState
@@ -119,6 +121,7 @@ fun AccountManageScreen(
                         name = balance.account.name,
                         type = balance.account.type,
                         balanceMinor = balance.balanceMinor,
+                        currencyCode = balance.account.currencyCode,
                         onEdit = { editTarget = Pair(false, balance.account) },
                         onArchive = { archiveTarget = balance.account },
                     )
@@ -146,6 +149,7 @@ fun AccountManageScreen(
                             MoneyText(
                                 amountMinor = balance.balanceMinor,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                currencyCode = balance.account.currencyCode,
                             )
                         }
                         HorizontalDivider()
@@ -158,10 +162,10 @@ fun AccountManageScreen(
     editTarget?.let { (isNew, account) ->
         AccountEditDialog(
             account = account,
-            onConfirm = { name, type, balanceText, sortText ->
+            onConfirm = { name, type, balanceText, sortText, currency ->
                 val ledgerId = session.currentLedgerId
                 if (ledgerId != null) {
-                    viewModel.save(account, ledgerId, name, type, balanceText, sortText)
+                    viewModel.save(account, ledgerId, name, type, balanceText, sortText, currency)
                 }
                 editTarget = null
             },
@@ -187,6 +191,7 @@ private fun AccountRow(
     name: String,
     type: AccountType,
     balanceMinor: Long,
+    currencyCode: String,
     onEdit: () -> Unit,
     onArchive: () -> Unit,
 ) {
@@ -198,12 +203,12 @@ private fun AccountRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(name, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
             Text(
-                accountTypeLabel(type),
+                "${accountTypeLabel(type)} · ${currencyLabel(currencyCode)}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        MoneyText(amountMinor = balanceMinor)
+        MoneyText(amountMinor = balanceMinor, currencyCode = currencyCode)
         IconButton(onClick = { menuExpanded = true }) {
             Icon(Icons.Default.MoreVert, contentDescription = "更多操作")
         }
@@ -229,13 +234,14 @@ private fun AccountRow(
 @Composable
 private fun AccountEditDialog(
     account: Account?,
-    onConfirm: (name: String, type: AccountType, balanceText: String, sortText: String) -> Unit,
+    onConfirm: (name: String, type: AccountType, balanceText: String, sortText: String, currency: String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var name by remember { mutableStateOf(account?.name ?: "") }
     var type by remember { mutableStateOf(account?.type ?: AccountType.CASH) }
+    var currency by remember { mutableStateOf(account?.currencyCode ?: "CNY") }
     var balanceText by remember {
-        mutableStateOf(account?.let { MoneyFormatter.minorToInput(it.initialBalanceMinor) } ?: "0")
+        mutableStateOf(account?.let { MoneyFormatter.minorToInput(it.initialBalanceMinor, it.currencyCode) } ?: "0")
     }
     var sortText by remember { mutableStateOf(account?.sortOrder?.toString() ?: "0") }
 
@@ -262,6 +268,16 @@ private fun AccountEditDialog(
                     }
                 }
                 Spacer(Modifier.height(8.dp))
+                Text("币种", style = MaterialTheme.typography.bodySmall)
+                CurrencyChips(selected = currency, onSelect = { currency = it })
+                if (account != null) {
+                    Text(
+                        "已有流水的账户不能改币种。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = balanceText,
                     onValueChange = { balanceText = it },
@@ -279,7 +295,7 @@ private fun AccountEditDialog(
         },
         confirmButton = {
             TextButton(
-                onClick = { onConfirm(name, type, balanceText, sortText) },
+                onClick = { onConfirm(name, type, balanceText, sortText, currency) },
                 enabled = name.isNotBlank(),
             ) { Text("保存") }
         },
@@ -288,3 +304,6 @@ private fun AccountEditDialog(
         },
     )
 }
+
+private fun currencyLabel(code: String): String =
+    CurrencyCatalog.supported.firstOrNull { it.code == code }?.label ?: code

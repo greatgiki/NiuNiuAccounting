@@ -3,6 +3,7 @@ package com.example.localledger.data.local.converter
 import androidx.room.TypeConverter
 import com.example.localledger.domain.model.AccountType
 import com.example.localledger.domain.model.CategoryType
+import com.example.localledger.domain.model.RecurrencePeriod
 import com.example.localledger.domain.model.TransactionType
 
 class RoomConverters {
@@ -23,5 +24,11 @@ class RoomConverters {
 
     @TypeConverter
     fun stringToTransactionType(value: String): TransactionType = TransactionType.valueOf(value)
+
+    @TypeConverter
+    fun recurrencePeriodToString(value: RecurrencePeriod): String = value.name
+
+    @TypeConverter
+    fun stringToRecurrencePeriod(value: String): RecurrencePeriod = RecurrencePeriod.valueOf(value)
 }
 

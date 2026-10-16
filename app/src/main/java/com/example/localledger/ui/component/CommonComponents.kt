@@ -40,11 +40,12 @@ fun MoneyText(
     style: TextStyle = MaterialTheme.typography.bodyLarge,
     color: Color = MaterialTheme.colorScheme.onSurface,
     signed: Boolean? = null,
+    currencyCode: String = "CNY",
 ) {
     val text = when (signed) {
-        true -> MoneyFormatter.formatSigned(amountMinor, positive = true)
-        false -> MoneyFormatter.formatSigned(amountMinor, positive = false)
-        null -> MoneyFormatter.format(amountMinor)
+        true -> MoneyFormatter.formatSigned(amountMinor, positive = true, currencyCode = currencyCode)
+        false -> MoneyFormatter.formatSigned(amountMinor, positive = false, currencyCode = currencyCode)
+        null -> MoneyFormatter.format(amountMinor, currencyCode)
     }
     Text(
         text = text,
@@ -61,6 +62,7 @@ fun TransactionAmountText(
     amountMinor: Long,
     modifier: Modifier = Modifier,
     style: TextStyle = MaterialTheme.typography.bodyLarge,
+    currencyCode: String = "CNY",
 ) {
     val signed = when (type) {
         TransactionType.EXPENSE -> false
@@ -73,6 +75,7 @@ fun TransactionAmountText(
         style = style,
         color = amountColor(type),
         signed = signed,
+        currencyCode = currencyCode,
     )
 }
 
@@ -154,13 +157,14 @@ fun SummaryAmountRow(
     incomeMinor: Long,
     expenseMinor: Long,
     modifier: Modifier = Modifier,
+    currencyCode: String = "CNY",
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceEvenly,
     ) {
-        SummaryItem("收入", incomeMinor, TransactionType.INCOME)
-        SummaryItem("支出", expenseMinor, TransactionType.EXPENSE)
+        SummaryItem("收入", incomeMinor, TransactionType.INCOME, currencyCode)
+        SummaryItem("支出", expenseMinor, TransactionType.EXPENSE, currencyCode)
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 "结余",
@@ -170,13 +174,14 @@ fun SummaryAmountRow(
             MoneyText(
                 amountMinor = incomeMinor - expenseMinor,
                 style = MaterialTheme.typography.titleMedium,
+                currencyCode = currencyCode,
             )
         }
     }
 }
 
 @Composable
-private fun SummaryItem(label: String, amountMinor: Long, type: TransactionType) {
+private fun SummaryItem(label: String, amountMinor: Long, type: TransactionType, currencyCode: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             label,
@@ -187,6 +192,7 @@ private fun SummaryItem(label: String, amountMinor: Long, type: TransactionType)
             type = type,
             amountMinor = amountMinor,
             style = MaterialTheme.typography.titleMedium,
+            currencyCode = currencyCode,
         )
     }
 }
@@ -201,6 +207,7 @@ fun TransactionRowContent(
     zoneId: ZoneId,
     iconKey: String?,
     modifier: Modifier = Modifier,
+    currencyCode: String = "CNY",
 ) {
     Row(
         modifier = modifier.fillMaxWidth().padding(vertical = 10.dp),
@@ -228,7 +235,7 @@ fun TransactionRowContent(
         }
         Spacer(Modifier.size(12.dp))
         Column(horizontalAlignment = Alignment.End) {
-            TransactionAmountText(type = type, amountMinor = amountMinor)
+            TransactionAmountText(type = type, amountMinor = amountMinor, currencyCode = currencyCode)
             Text(
                 DateTimeFormatters.time(timeMillis, zoneId),
                 style = MaterialTheme.typography.bodySmall,

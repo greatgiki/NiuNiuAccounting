@@ -36,6 +36,8 @@ data class SessionState(
     val currentLedgerId: String? get() = settings?.currentLedgerId
     val currentLedgerName: String
         get() = ledgers.firstOrNull { it.id == settings?.currentLedgerId }?.name ?: ""
+    val currentLedgerCurrency: String
+        get() = ledgers.firstOrNull { it.id == settings?.currentLedgerId }?.currencyCode ?: "CNY"
     val themeMode: ThemeMode get() = settings?.themeMode ?: ThemeMode.SYSTEM
     val showDataLossNotice: Boolean
         get() = isReady && settings?.hasAcknowledgedDataLoss == false
