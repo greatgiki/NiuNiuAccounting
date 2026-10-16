@@ -1,5 +1,6 @@
 package com.example.localledger.ui.common
 
+import com.example.localledger.domain.money.CurrencyCatalog
 import java.math.BigInteger
 import java.time.Instant
 import java.time.LocalDate
@@ -13,26 +14,37 @@ object MoneyFormatter {
     private val MIN_LONG = BigInteger.valueOf(Long.MIN_VALUE)
     private val MAX_LONG = BigInteger.valueOf(Long.MAX_VALUE)
 
-    fun format(amountMinor: Long): String {
+    fun format(amountMinor: Long, currencyCode: String = "CNY"): String {
+        val spec = CurrencyCatalog.of(currencyCode)
         val negative = amountMinor < 0
         val abs = BigInteger.valueOf(amountMinor).abs()
-        val yuan = abs.divide(HUNDRED)
-        val fen = abs.remainder(HUNDRED).toInt()
+        val factor = BigInteger.TEN.pow(spec.minorDigits)
+        val major = if (spec.minorDigits == 0) abs else abs.divide(factor)
+        val fraction = if (spec.minorDigits == 0) 0 else abs.remainder(factor).toInt()
         val sign = if (negative) "-" else ""
-        return "$sign¥$yuan.${fen.toString().padStart(2, '0')}"
+        val digits = if (spec.minorDigits == 0) {
+            "$major"
+        } else {
+            "$major.${fraction.toString().padStart(spec.minorDigits, '0')}"
+        }
+        return "$sign${spec.symbol}$digits"
     }
 
-    fun formatSigned(amountMinor: Long, positive: Boolean): String {
-        val body = format(amountMinor).removePrefix("-")
+    fun formatSigned(amountMinor: Long, positive: Boolean, currencyCode: String = "CNY"): String {
+        val body = format(amountMinor, currencyCode).removePrefix("-")
         return (if (positive) "+" else "-") + body
     }
 
-    fun minorToInput(amountMinor: Long): String {
+    fun minorToInput(amountMinor: Long, currencyCode: String = "CNY"): String {
+        val digits = CurrencyCatalog.of(currencyCode).minorDigits
         val abs = BigInteger.valueOf(amountMinor).abs()
-        val yuan = abs.divide(HUNDRED)
-        val fen = abs.remainder(HUNDRED).toInt()
+        val factor = BigInteger.TEN.pow(digits)
+        val major = if (digits == 0) abs else abs.divide(factor)
+        val fraction = if (digits == 0) 0 else abs.remainder(factor).toInt()
         val sign = if (amountMinor < 0) "-" else ""
-        return if (fen == 0) "$sign$yuan" else "$sign$yuan.${fen.toString().padStart(2, '0').trimEnd('0')}"
+        if (digits == 0 || fraction == 0) return "$sign$major"
+        val fractionText = fraction.toString().padStart(digits, '0').trimEnd('0')
+        return "$sign$major.$fractionText"
     }
 
     fun parseSigned(input: String): Long? {

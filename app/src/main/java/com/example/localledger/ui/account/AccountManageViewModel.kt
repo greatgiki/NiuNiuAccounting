@@ -2,13 +2,14 @@ package com.example.localledger.ui.account
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.localledger.core.money.MoneyParser
 import com.example.localledger.domain.error.LedgerException
 import com.example.localledger.domain.model.Account
 import com.example.localledger.domain.model.AccountBalance
 import com.example.localledger.domain.model.AccountType
+import com.example.localledger.domain.money.CurrencyCatalog
 import com.example.localledger.domain.repository.AccountRepository
 import com.example.localledger.ui.AppSession
-import com.example.localledger.ui.common.MoneyFormatter
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
@@ -69,9 +70,12 @@ class AccountManageViewModel @Inject constructor(
         type: AccountType,
         initialBalanceText: String,
         sortOrderText: String,
+        currencyCode: String,
     ) {
-        val initialBalance = MoneyFormatter.parseSigned(initialBalanceText.ifBlank { "0" })
-        if (initialBalance == null) {
+        val initialBalance = try {
+            val digits = CurrencyCatalog.of(currencyCode).minorDigits
+            MoneyParser.toSignedMinor(initialBalanceText.ifBlank { "0" }, digits)
+        } catch (error: LedgerException) {
             viewModelScope.launch {
                 effectChannel.send(AccountEffect.ShowMessage("初始余额格式不正确"))
             }
@@ -83,6 +87,7 @@ class AccountManageViewModel @Inject constructor(
             ledgerId = ledgerId,
             name = name.trim(),
             type = type,
+            currencyCode = currencyCode,
             initialBalanceMinor = initialBalance,
             sortOrder = sortOrderText.toIntOrNull() ?: 0,
             isArchived = existing?.isArchived ?: false,

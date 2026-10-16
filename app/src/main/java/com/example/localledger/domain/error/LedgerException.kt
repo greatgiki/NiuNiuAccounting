@@ -19,5 +19,14 @@ sealed class LedgerException(message: String, cause: Throwable? = null) : Except
     class TransactionLedgerMismatch : LedgerException("不能将流水移动到其他账本")
     class ArithmeticOverflow : LedgerException("金额累计超出支持范围")
     class LocalStorage(cause: Throwable? = null) : LedgerException("本地数据存储不可用", cause)
+    class UnsupportedCurrency(code: String) : LedgerException("不支持的币种 $code")
+    class ExchangeRateUnavailable(cause: Throwable? = null) :
+        LedgerException("没有可用汇率，请联网刷新后再记外币", cause)
+    class AccountCurrencyLocked : LedgerException("账户已有流水，不能修改币种")
+    class BudgetNotFound : LedgerException("预算不存在")
+    class DuplicateBudget : LedgerException("这个月份的预算已经存在")
+    class InvalidBudget : LedgerException("预算金额必须大于 0")
+    class RecurringRuleNotFound : LedgerException("周期规则不存在")
+    class InvalidRecurrence : LedgerException("周期规则不完整或日期无效")
 }
 

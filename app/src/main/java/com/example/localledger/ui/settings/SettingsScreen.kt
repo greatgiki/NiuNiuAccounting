@@ -12,18 +12,25 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import com.example.localledger.core.storage.ThemeMode
@@ -60,7 +67,13 @@ fun SettingsScreen(
             SettingsEntry("收入分类") {
                 navController.navigate(Routes.categories(CategoryType.INCOME))
             }
+            HorizontalDivider()
+            SettingsEntry("预算") { navController.navigate(Routes.BUDGETS) }
+            HorizontalDivider()
+            SettingsEntry("周期记账") { navController.navigate(Routes.RECURRING) }
         }
+
+        ExchangeRateSection()
 
         SectionTitle("外观")
         Card(modifier = Modifier.fillMaxWidth()) {
@@ -98,7 +111,9 @@ fun SettingsScreen(
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "本应用完全离线，不会上传任何数据。\n" +
+                    "账本、账户和流水只保存在本机，不会上传。\n" +
+                        "刷新汇率时优先读取中国外汇交易中心公布的人民币汇率中间价，只获取公开汇率，不发送账本内容。\n" +
+                        "中间价未公布的币种再向其他公开接口补齐。没有网络时继续使用上次缓存的汇率。\n" +
                         "卸载应用、清除应用数据或恢复出厂设置后，账本数据将被删除且无法恢复。\n" +
                         "当前版本不支持备份与恢复。",
                     style = MaterialTheme.typography.bodyMedium,
@@ -108,6 +123,75 @@ fun SettingsScreen(
         }
         Spacer(Modifier.height(96.dp))
     }
+}
+
+@Composable
+private fun ExchangeRateSection(viewModel: ExchangeRateViewModel = hiltViewModel()) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    var message by remember { mutableStateOf<String?>(null) }
+    var confirmRevalue by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        viewModel.effects.collect { message = it }
+    }
+    SectionTitle("汇率")
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("本位币 ${state.currencyCode}", style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                state.updatedText,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (state.source.isNotBlank()) {
+                Text(
+                    "来源 ${state.source}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                "保存时写入当时的本位币金额。刷新汇率不会自动改历史。需要时可以按当前缓存重算，账户原币金额和手工填写的转入金额保持不变。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            if (message != null) {
+                Text(message ?: "", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
+            }
+            TextButton(onClick = viewModel::refresh) { Text("刷新汇率") }
+            TextButton(onClick = { confirmRevalue = true }) { Text("按当前汇率重算历史") }
+        }
+    }
+    if (confirmRevalue) {
+        RevalueConfirmDialog(
+            onConfirm = {
+                confirmRevalue = false
+                viewModel.revalueWithCurrentRates()
+            },
+            onDismiss = { confirmRevalue = false },
+        )
+    }
+}
+
+@Composable
+internal fun RevalueConfirmDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("按当前汇率重算？") },
+        text = {
+            Text("将用当前缓存汇率重算本账本全部流水的本位币金额，不按各笔流水的日期挑选历史汇率。此操作不可撤销。")
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text("重算") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        },
+    )
 }
 
 @Composable

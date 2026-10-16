@@ -10,6 +10,7 @@ import com.example.localledger.domain.model.Category
 import com.example.localledger.domain.model.CategoryType
 import com.example.localledger.domain.model.SaveTransactionCommand
 import com.example.localledger.domain.model.TransactionType
+import com.example.localledger.domain.money.CurrencyCatalog
 import com.example.localledger.domain.repository.AccountRepository
 import com.example.localledger.domain.repository.CategoryRepository
 import com.example.localledger.domain.repository.TransactionRepository
@@ -48,6 +49,7 @@ sealed interface EditorEffect {
 data class EditorInput(
     val type: TransactionType = TransactionType.EXPENSE,
     val amountText: String = "",
+    val toAmountText: String = "",
     val categoryId: String? = null,
     val accountId: String? = null,
     val toAccountId: String? = null,
@@ -140,7 +142,10 @@ class TransactionEditorViewModel @Inject constructor(
                         inputFlow.update {
                             it.copy(
                                 type = t.type,
-                                amountText = MoneyFormatter.minorToInput(t.amountMinor),
+                                amountText = MoneyFormatter.minorToInput(t.amountMinor, detail.accountCurrencyCode),
+                                toAmountText = t.toAmountMinor?.let {
+                                    MoneyFormatter.minorToInput(it, detail.toAccountCurrencyCode ?: detail.accountCurrencyCode)
+                                }.orEmpty(),
                                 categoryId = t.categoryId,
                                 accountId = t.accountId,
                                 toAccountId = t.toAccountId,
@@ -225,12 +230,13 @@ class TransactionEditorViewModel @Inject constructor(
     }
 
     fun onAmountKey(key: String) {
+        val scale = selectedScale(inputFlow.value.accountId)
         inputFlow.update { input ->
             val current = input.amountText
             val next = when (key) {
                 "backspace" -> current.dropLast(1)
                 "clear" -> ""
-                "." -> if (current.contains(".")) current else current.ifEmpty { "0" } + "."
+                "." -> if (scale == 0 || current.contains(".")) current else current.ifEmpty { "0" } + "."
                 else -> {
                     val candidate = current + key
                     val dotIndex = candidate.indexOf('.')
@@ -238,7 +244,7 @@ class TransactionEditorViewModel @Inject constructor(
                     val decimalPart = if (dotIndex >= 0) candidate.substring(dotIndex + 1) else ""
                     when {
                         integerPart.length > 13 -> current
-                        decimalPart.length > 2 -> current
+                        decimalPart.length > scale -> current
                         integerPart.length > 1 && integerPart.startsWith("0") && dotIndex < 0 ->
                             integerPart.trimStart('0').ifEmpty { "0" }
                         else -> candidate
@@ -259,6 +265,10 @@ class TransactionEditorViewModel @Inject constructor(
 
     fun onToAccountSelect(accountId: String) {
         inputFlow.update { it.copy(toAccountId = accountId, accountError = null) }
+    }
+
+    fun onToAmountChange(text: String) {
+        inputFlow.update { it.copy(toAmountText = text.take(16), amountError = null) }
     }
 
     fun swapTransferAccounts() {
@@ -290,10 +300,20 @@ class TransactionEditorViewModel @Inject constructor(
         if (input.saving) return
 
         val amount = try {
-            MoneyParser.yuanToMinor(input.amountText)
+            MoneyParser.toMinor(input.amountText, selectedScale(input.accountId))
         } catch (error: LedgerException) {
             inputFlow.update { it.copy(amountError = error.message) }
             return
+        }
+        val toAmount = if (input.type == TransactionType.TRANSFER && input.toAmountText.isNotBlank()) {
+            try {
+                MoneyParser.toMinor(input.toAmountText, selectedScale(input.toAccountId))
+            } catch (error: LedgerException) {
+                inputFlow.update { it.copy(amountError = error.message) }
+                return
+            }
+        } else {
+            null
         }
 
         when (input.type) {
@@ -339,6 +359,7 @@ class TransactionEditorViewModel @Inject constructor(
                     categoryId = if (input.type == TransactionType.TRANSFER) null else input.categoryId,
                     transactionAt = input.transactionAt,
                     note = input.note,
+                    toAmountMinor = toAmount,
                 )
                 if (input.type == TransactionType.TRANSFER) {
                     saveTransferUseCase(command)
@@ -384,6 +405,11 @@ class TransactionEditorViewModel @Inject constructor(
                 effectChannel.send(EditorEffect.ShowMessage(error.message ?: "删除失败"))
             }
         }
+    }
+
+    private fun selectedScale(accountId: String?): Int {
+        val code = uiState.value.allAccounts.firstOrNull { it.id == accountId }?.currencyCode ?: "CNY"
+        return CurrencyCatalog.of(code).minorDigits
     }
 
     private fun categoryTypeOf(type: TransactionType): CategoryType = when (type) {

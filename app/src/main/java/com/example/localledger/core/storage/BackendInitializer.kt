@@ -1,10 +1,16 @@
 package com.example.localledger.core.storage
 
+import android.content.Context
+import android.util.Log
 import androidx.room.withTransaction
 import com.example.localledger.data.local.database.DatabaseProvider
 import com.example.localledger.data.local.database.PresetData
+import com.example.localledger.data.work.RecurringWorkScheduler
 import com.example.localledger.domain.error.LedgerException
+import com.example.localledger.domain.usecase.GenerateRecurringTransactionsUseCase
+import com.example.localledger.domain.usecase.RefreshExchangeRatesUseCase
 import com.example.localledger.di.ApplicationScope
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,9 +30,12 @@ sealed interface InitializationState {
 
 @Singleton
 class BackendInitializer @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val databaseProvider: DatabaseProvider,
     private val settingsStore: SettingsStore,
     private val clock: Clock,
+    private val generateRecurring: GenerateRecurringTransactionsUseCase,
+    private val refreshExchangeRates: RefreshExchangeRatesUseCase,
     @ApplicationScope private val applicationScope: CoroutineScope,
 ) {
     private val mutableState = MutableStateFlow<InitializationState>(InitializationState.Initializing)
@@ -56,7 +65,9 @@ class BackendInitializer @Inject constructor(
             if (selected == null || selected.isArchived) {
                 settings = settingsStore.update { it.copy(currentLedgerId = activeLedgerId) }
             }
-            InitializationState.Ready(settings).also { mutableState.value = it }
+            InitializationState.Ready(settings).also { mutableState.value = it }.also {
+                applicationScope.launch { catchUp() }
+            }
         } catch (error: CancellationException) {
             throw error
         } catch (error: LedgerException.LocalStorage) {
@@ -65,6 +76,24 @@ class BackendInitializer @Inject constructor(
             InitializationState.Error(LedgerException.LocalStorage(error)).also {
                 mutableState.value = it
             }
+        }
+    }
+
+    private suspend fun catchUp() {
+        try {
+            RecurringWorkScheduler.schedule(context)
+            generateRecurring()
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Log.e("LocalLedger", "周期记账补记失败", error)
+        }
+        try {
+            refreshExchangeRates.refreshAll()
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Log.e("LocalLedger", "汇率刷新失败，继续使用本地缓存", error)
         }
     }
 

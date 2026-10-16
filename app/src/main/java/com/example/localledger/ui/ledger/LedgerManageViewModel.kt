@@ -27,20 +27,21 @@ class LedgerManageViewModel @Inject constructor(
     private val effectChannel = Channel<LedgerEffect>(Channel.BUFFERED)
     val effects = effectChannel.receiveAsFlow()
 
-    fun create(name: String) {
+    fun create(name: String, currencyCode: String) {
         viewModelScope.launch {
             try {
-                appSession.createLedgerAndSwitch(name)
+                val id = ledgerRepository.createLedger(name, currencyCode)
+                appSession.switchLedger(id)
             } catch (error: LedgerException) {
                 effectChannel.send(LedgerEffect.ShowMessage(error.message ?: "创建账本失败"))
             }
         }
     }
 
-    fun rename(ledger: Ledger, name: String) {
+    fun rename(ledger: Ledger, name: String, currencyCode: String) {
         viewModelScope.launch {
             try {
-                ledgerRepository.updateLedger(ledger.copy(name = name))
+                ledgerRepository.updateLedger(ledger.copy(name = name, currencyCode = currencyCode))
             } catch (error: LedgerException) {
                 effectChannel.send(LedgerEffect.ShowMessage(error.message ?: "修改账本失败"))
             }

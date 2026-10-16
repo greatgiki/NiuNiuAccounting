@@ -38,10 +38,25 @@ class StatisticsRepositoryImpl @Inject constructor(
     override fun observeExpenseCategories(
         ledgerId: String,
         range: DateTimeRange,
+    ): Flow<List<CategoryTotal>> = categories(ledgerId, range, income = false)
+
+    override fun observeIncomeCategories(
+        ledgerId: String,
+        range: DateTimeRange,
+    ): Flow<List<CategoryTotal>> = categories(ledgerId, range, income = true)
+
+    private fun categories(
+        ledgerId: String,
+        range: DateTimeRange,
+        income: Boolean,
     ): Flow<List<CategoryTotal>> = flow {
-        emitAll(databaseProvider.get().transactionDao().observeExpenseCategories(
-            ledgerId, range.startInclusive, range.endExclusive,
-        ).map { rows -> rows.map { it.toDomain() } })
+        val dao = databaseProvider.get().transactionDao()
+        val source = if (income) {
+            dao.observeIncomeCategories(ledgerId, range.startInclusive, range.endExclusive)
+        } else {
+            dao.observeExpenseCategories(ledgerId, range.startInclusive, range.endExclusive)
+        }
+        emitAll(source.map { rows -> rows.map { it.toDomain() } })
     }
 
     override fun observeDailyTrend(
