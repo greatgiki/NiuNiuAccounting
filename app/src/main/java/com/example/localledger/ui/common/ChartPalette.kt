@@ -3,7 +3,9 @@ package com.example.localledger.ui.common
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import com.example.localledger.domain.model.TransactionType
+import com.example.localledger.ui.theme.LocalLedgerDarkTheme
 import com.example.localledger.ui.theme.amountColor
+import com.example.localledger.ui.theme.chartPalette
 
 object ChartPalette {
     val colors: List<Color> = listOf(
@@ -23,6 +25,7 @@ object ChartPalette {
 @Composable
 fun categoryAccent(iconKey: String?, type: TransactionType): Color {
     if (type == TransactionType.TRANSFER || iconKey.isNullOrBlank()) return amountColor(type)
-    val index = kotlin.math.abs(iconKey.hashCode()) % ChartPalette.colors.size
-    return ChartPalette.color(index)
+    val colors = chartPalette(LocalLedgerDarkTheme.current)
+    val index = kotlin.math.abs(iconKey.hashCode()) % colors.size
+    return colors[index]
 }

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -44,6 +45,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,12 +60,13 @@ import com.example.localledger.domain.money.CurrencyCatalog
 import com.example.localledger.ui.common.CurrencyChips
 import com.example.localledger.ui.common.MoneyFormatter
 import com.example.localledger.ui.component.AmountField
+import com.example.localledger.ui.component.CollapsibleSectionHeader
 import com.example.localledger.ui.component.ConfirmDeleteDialog
 import com.example.localledger.ui.component.EmptyState
 import com.example.localledger.ui.component.ErrorState
 import com.example.localledger.ui.component.LoadingState
 import com.example.localledger.ui.component.MoneyText
-import com.example.localledger.ui.home.SectionTitle
+import com.example.localledger.ui.component.SubmitGate
 
 fun accountTypeLabel(type: AccountType): String = when (type) {
     AccountType.CASH -> "现金"
@@ -93,6 +96,10 @@ fun AccountManageScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var editTarget by remember { mutableStateOf<Pair<Boolean, Account?>?>(null) }
     var archiveTarget by remember { mutableStateOf<Account?>(null) }
+    var archivedExpanded by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val saveGate = remember { SubmitGate() }
+    val archiveGate = remember { SubmitGate() }
 
     LaunchedEffect(Unit) {
         viewModel.effects.collect { effect ->
@@ -118,7 +125,10 @@ fun AccountManageScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
-            FloatingActionButton(onClick = { editTarget = Pair(true, null) }) {
+            FloatingActionButton(onClick = {
+                saveGate.reset()
+                editTarget = Pair(true, null)
+            }) {
                 Icon(Icons.Default.Add, contentDescription = "新建账户")
             }
         },
@@ -132,25 +142,35 @@ fun AccountManageScreen(
                 modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
             ) {
                 if (active.isEmpty()) {
-                    item { EmptyState("暂无账户，点击右下角新建") }
+                    item(key = "empty") { EmptyState("暂无账户，点击右下角新建") }
                 }
-                items(active, key = { it.account.id }) { balance ->
+                items(active, key = { it.account.id }, contentType = { "account" }) { balance ->
                     AccountRow(
                         modifier = Modifier.animateItem(),
                         name = balance.account.name,
                         type = balance.account.type,
                         balanceMinor = balance.balanceMinor,
                         currencyCode = balance.account.currencyCode,
-                        onEdit = { editTarget = Pair(false, balance.account) },
+                        onEdit = {
+                            saveGate.reset()
+                            editTarget = Pair(false, balance.account)
+                        },
                         onArchive = { archiveTarget = balance.account },
                     )
                     HorizontalDivider()
                 }
                 if (archived.isNotEmpty()) {
-                    item { SectionTitle("已停用") }
-                    items(archived, key = { it.account.id }) { balance ->
+                    item(key = "archived-header") {
+                        CollapsibleSectionHeader(
+                            title = "已停用（${archived.size}）",
+                            expanded = archivedExpanded,
+                            onToggle = { archivedExpanded = !archivedExpanded },
+                        )
+                    }
+                    if (archivedExpanded) {
+                    items(archived, key = { "archived-${it.account.id}" }, contentType = { "archived-account" }) { balance ->
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
@@ -173,22 +193,31 @@ fun AccountManageScreen(
                         }
                         HorizontalDivider()
                     }
+                    }
                 }
             }
         }
     }
 
-    editTarget?.let { (isNew, account) ->
+    editTarget?.let { (_, account) ->
         AccountEditDialog(
             account = account,
+            submitting = saveGate.submitting,
+            errorMessage = saveGate.error,
             onConfirm = { name, type, balanceText, sortText, currency ->
-                val ledgerId = session.currentLedgerId
-                if (ledgerId != null) {
+                val ledgerId = session.currentLedgerId ?: return@AccountEditDialog
+                saveGate.launch(scope, {
                     viewModel.save(account, ledgerId, name, type, balanceText, sortText, currency)
+                }) {
+                    editTarget = null
                 }
-                editTarget = null
             },
-            onDismiss = { editTarget = null },
+            onDismiss = {
+                if (!saveGate.submitting) {
+                    saveGate.reset()
+                    editTarget = null
+                }
+            },
         )
     }
 
@@ -196,11 +225,18 @@ fun AccountManageScreen(
         ConfirmDeleteDialog(
             title = "停用账户“${account.name}”？",
             message = "停用后不能再用于新流水，历史流水和余额仍会保留。",
+            confirmLabel = "停用",
+            submitting = archiveGate.submitting,
+            errorMessage = archiveGate.error,
             onConfirm = {
-                archiveTarget = null
-                viewModel.archive(account.id)
+                archiveGate.launch(scope, { viewModel.archive(account.id) }) {
+                    archiveTarget = null
+                }
             },
-            onDismiss = { archiveTarget = null },
+            onDismiss = {
+                archiveGate.reset()
+                archiveTarget = null
+            },
         )
     }
 }
@@ -217,7 +253,7 @@ private fun AccountRow(
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     Row(
-        modifier = modifier.fillMaxWidth().padding(vertical = 10.dp),
+        modifier = modifier.fillMaxWidth().heightIn(min = 48.dp).padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
@@ -256,6 +292,8 @@ private fun AccountEditDialog(
     account: Account?,
     onConfirm: (name: String, type: AccountType, balanceText: String, sortText: String, currency: String) -> Unit,
     onDismiss: () -> Unit,
+    submitting: Boolean = false,
+    errorMessage: String? = null,
 ) {
     var name by remember { mutableStateOf(account?.name ?: "") }
     var type by remember { mutableStateOf(account?.type ?: AccountType.CASH) }
@@ -310,17 +348,26 @@ private fun AccountEditDialog(
                     onValueChange = { sortText = it.filter(Char::isDigit).take(5) },
                     label = { Text("排序（数字越小越靠前）") },
                     singleLine = true,
+                    enabled = !submitting,
                 )
+                if (!errorMessage.isNullOrBlank()) {
+                    Text(
+                        errorMessage,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
             }
         },
         confirmButton = {
             TextButton(
-                onClick = { onConfirm(name, type, balanceText, sortText, currency) },
-                enabled = name.isNotBlank(),
-            ) { Text("保存") }
+                onClick = { if (!submitting) onConfirm(name, type, balanceText, sortText, currency) },
+                enabled = name.isNotBlank() && !submitting,
+            ) { Text(if (submitting) "保存中…" else "保存") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(onClick = onDismiss, enabled = !submitting) { Text("取消") }
         },
     )
 }

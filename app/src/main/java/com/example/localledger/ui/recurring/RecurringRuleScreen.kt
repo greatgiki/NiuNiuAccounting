@@ -47,6 +47,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,6 +67,7 @@ import com.example.localledger.ui.component.CategoryIconGrid
 import com.example.localledger.ui.component.EmptyState
 import com.example.localledger.ui.component.ErrorState
 import com.example.localledger.ui.component.LoadingState
+import com.example.localledger.ui.component.SubmitGate
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -82,6 +84,10 @@ fun RecurringRuleScreen(
     var creating by remember { mutableStateOf(false) }
     var resumeTarget by remember { mutableStateOf<RecurringRule?>(null) }
     var deleteTarget by remember { mutableStateOf<RecurringRule?>(null) }
+    val scope = rememberCoroutineScope()
+    val saveGate = remember { SubmitGate() }
+    val resumeGate = remember { SubmitGate() }
+    val deleteGate = remember { SubmitGate() }
 
     LaunchedEffect(Unit) {
         viewModel.effects.collect { effect ->
@@ -104,7 +110,10 @@ fun RecurringRuleScreen(
         },
         snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = {
-            FloatingActionButton(onClick = { creating = true }) {
+            FloatingActionButton(onClick = {
+                saveGate.reset()
+                creating = true
+            }) {
                 Icon(Icons.Default.Add, contentDescription = "新建周期规则")
             }
         },
@@ -118,7 +127,7 @@ fun RecurringRuleScreen(
                 EmptyState("还没有周期规则。保存后会在打开应用或后台任务时自动入账。")
             }
             else -> LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
-                item {
+                item(key = "intro") {
                     Text(
                         "按日、周、月、年自动记一笔。同一规则的同一天只会生成一次。",
                         style = MaterialTheme.typography.bodySmall,
@@ -126,47 +135,68 @@ fun RecurringRuleScreen(
                         modifier = Modifier.padding(vertical = 8.dp),
                     )
                 }
-                items(state.rules, key = { it.id }) { rule ->
+                items(state.rules, key = { it.id }, contentType = { "rule" }) { rule ->
                     RuleRow(
                         modifier = Modifier.animateItem(),
                         rule = rule,
-                        onEdit = { editing = rule },
+                        onEdit = {
+                            saveGate.reset()
+                            editing = rule
+                        },
                         onPause = { viewModel.pause(rule) },
                         onResume = { resumeTarget = rule },
                         onDelete = { deleteTarget = rule },
                     )
                     HorizontalDivider()
                 }
-                item { Spacer(Modifier.height(96.dp)) }
+                item(key = "bottom-space") { Spacer(Modifier.height(24.dp)) }
             }
         }
     }
 
     resumeTarget?.let { rule ->
         ResumeRuleDialog(
+            submitting = resumeGate.submitting,
+            errorMessage = resumeGate.error,
             onBackfill = {
-                resumeTarget = null
-                viewModel.resume(rule, ResumeChoice.BACKFILL)
+                resumeGate.launch(scope, { viewModel.resume(rule, ResumeChoice.BACKFILL) }) {
+                    resumeTarget = null
+                }
             },
             onSkip = {
-                resumeTarget = null
-                viewModel.resume(rule, ResumeChoice.SKIP_MISSED)
+                resumeGate.launch(scope, { viewModel.resume(rule, ResumeChoice.SKIP_MISSED) }) {
+                    resumeTarget = null
+                }
             },
-            onDismiss = { resumeTarget = null },
+            onDismiss = {
+                if (!resumeGate.submitting) {
+                    resumeGate.reset()
+                    resumeTarget = null
+                }
+            },
         )
     }
 
     deleteTarget?.let { rule ->
         DeleteRuleDialog(
+            submitting = deleteGate.submitting,
+            errorMessage = deleteGate.error,
             onKeepTransactions = {
-                deleteTarget = null
-                viewModel.delete(rule, deleteGenerated = false)
+                deleteGate.launch(scope, { viewModel.delete(rule, deleteGenerated = false) }) {
+                    deleteTarget = null
+                }
             },
             onDeleteTransactions = {
-                deleteTarget = null
-                viewModel.delete(rule, deleteGenerated = true)
+                deleteGate.launch(scope, { viewModel.delete(rule, deleteGenerated = true) }) {
+                    deleteTarget = null
+                }
             },
-            onDismiss = { deleteTarget = null },
+            onDismiss = {
+                if (!deleteGate.submitting) {
+                    deleteGate.reset()
+                    deleteTarget = null
+                }
+            },
         )
     }
 
@@ -174,14 +204,20 @@ fun RecurringRuleScreen(
         RuleDialog(
             state = state,
             existing = editing,
+            submitting = saveGate.submitting,
+            errorMessage = saveGate.error,
             onDismiss = {
-                creating = false
-                editing = null
+                if (!saveGate.submitting) {
+                    saveGate.reset()
+                    creating = false
+                    editing = null
+                }
             },
             onSave = { draft ->
-                viewModel.save(draft)
-                creating = false
-                editing = null
+                saveGate.launch(scope, { viewModel.save(draft) }) {
+                    creating = false
+                    editing = null
+                }
             },
         )
     }
@@ -233,18 +269,32 @@ internal fun ResumeRuleDialog(
     onBackfill: () -> Unit,
     onSkip: () -> Unit,
     onDismiss: () -> Unit,
+    submitting: Boolean = false,
+    errorMessage: String? = null,
 ) {
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!submitting) onDismiss() },
         title = { Text("恢复这条周期规则？") },
-        text = { Text("暂停期间错过的日期，可以现在补记，也可以跳到下一次，不再生成那些日期。") },
+        text = {
+            Column {
+                Text("暂停期间错过的日期，可以现在补记，也可以跳到下一次，不再生成那些日期。")
+                if (!errorMessage.isNullOrBlank()) {
+                    Text(
+                        errorMessage,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+            }
+        },
         confirmButton = {
-            TextButton(onClick = onBackfill) { Text("补记错过的日期") }
+            TextButton(onClick = onBackfill, enabled = !submitting) { Text("补记错过的日期") }
         },
         dismissButton = {
             Column {
-                TextButton(onClick = onSkip) { Text("跳到下一次") }
-                TextButton(onClick = onDismiss) { Text("取消") }
+                TextButton(onClick = onSkip, enabled = !submitting) { Text("跳到下一次") }
+                TextButton(onClick = onDismiss, enabled = !submitting) { Text("取消") }
             }
         },
     )
@@ -255,18 +305,32 @@ internal fun DeleteRuleDialog(
     onKeepTransactions: () -> Unit,
     onDeleteTransactions: () -> Unit,
     onDismiss: () -> Unit,
+    submitting: Boolean = false,
+    errorMessage: String? = null,
 ) {
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!submitting) onDismiss() },
         title = { Text("删除周期规则？") },
-        text = { Text("规则删除后不再自动记账。已经生成的流水可以保留，也可以一并删除。") },
+        text = {
+            Column {
+                Text("规则删除后不再自动记账。已经生成的流水可以保留，也可以一并删除。")
+                if (!errorMessage.isNullOrBlank()) {
+                    Text(
+                        errorMessage,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+            }
+        },
         confirmButton = {
-            TextButton(onClick = onKeepTransactions) { Text("只删除规则") }
+            TextButton(onClick = onKeepTransactions, enabled = !submitting) { Text("只删除规则") }
         },
         dismissButton = {
             Column {
-                TextButton(onClick = onDeleteTransactions) { Text("同时删除已生成流水") }
-                TextButton(onClick = onDismiss) { Text("取消") }
+                TextButton(onClick = onDeleteTransactions, enabled = !submitting) { Text("同时删除已生成流水") }
+                TextButton(onClick = onDismiss, enabled = !submitting) { Text("取消") }
             }
         },
     )
@@ -279,6 +343,8 @@ internal fun RuleDialog(
     existing: RecurringRule?,
     onDismiss: () -> Unit,
     onSave: (RecurringDraft) -> Unit,
+    submitting: Boolean = false,
+    errorMessage: String? = null,
 ) {
     var type by remember { mutableStateOf(existing?.type ?: TransactionType.EXPENSE) }
     var amount by remember { mutableStateOf(existing?.let { MoneyFormatter.minorToInput(it.amountMinor) } ?: "") }
@@ -301,7 +367,7 @@ internal fun RuleDialog(
     val categories = if (type == TransactionType.INCOME) state.incomeCategories else state.expenseCategories
 
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!submitting) onDismiss() },
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
     ) {
         Surface(modifier = Modifier.fillMaxSize(), shape = MaterialTheme.shapes.extraLarge) {
@@ -332,6 +398,7 @@ internal fun RuleDialog(
                 onValueChange = { amount = it },
                 label = "金额",
                 currencyCode = accountCurrency,
+                enabled = !submitting,
             )
             if (type == TransactionType.TRANSFER) {
                 AmountField(
@@ -388,8 +455,16 @@ internal fun RuleDialog(
                 onValueChange = { note = it.take(200) },
                 label = { Text("备注") },
                 singleLine = true,
+                enabled = !submitting,
                 modifier = Modifier.fillMaxWidth(),
             )
+            if (!errorMessage.isNullOrBlank()) {
+                Text(
+                    errorMessage,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
             Spacer(Modifier.height(8.dp))
         }
             Row(
@@ -398,10 +473,11 @@ internal fun RuleDialog(
                     .padding(horizontal = 20.dp, vertical = 12.dp),
                 horizontalArrangement = Arrangement.End,
             ) {
-                TextButton(onClick = onDismiss) { Text("取消") }
+                TextButton(onClick = onDismiss, enabled = !submitting) { Text("取消") }
                 Button(
+                    enabled = !submitting,
                     onClick = {
-                        if (end != null && end!!.isBefore(start)) return@Button
+                        if (submitting) return@Button
                         onSave(
                             RecurringDraft(
                                 existing = existing,
@@ -418,7 +494,7 @@ internal fun RuleDialog(
                             ),
                         )
                     },
-                ) { Text("保存") }
+                ) { Text(if (submitting) "保存中…" else "保存") }
             }
         }
         }
