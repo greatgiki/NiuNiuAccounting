@@ -58,6 +58,9 @@ data class Transaction(
     val toAmountMinor: Long? = null,
     val baseAmountMinor: Long = amountMinor,
     val fxRate: String = "1",
+    val externalSource: String? = null,
+    val externalId: String? = null,
+    val origin: String = "MANUAL",
 )
 
 data class AccountBalance(
@@ -112,6 +115,9 @@ data class SaveTransactionCommand(
     val note: String? = null,
     /** 转入金额，币种为转入账户。为空时按汇率或同币种原金额计算。 */
     val toAmountMinor: Long? = null,
+    val externalSource: String? = null,
+    val externalId: String? = null,
+    val origin: String? = null,
 )
 
 data class IncomeExpenseSummary(
