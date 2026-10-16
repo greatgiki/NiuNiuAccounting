@@ -77,6 +77,7 @@ import com.example.localledger.ui.component.MoneyText
 import com.example.localledger.ui.component.SummaryAmountRow
 import com.example.localledger.ui.home.SectionTitle
 import com.example.localledger.ui.navigation.Routes
+import com.example.localledger.ui.navigation.claimPagerHorizontalGesture
 import com.example.localledger.ui.navigation.navigateToTransactions
 import com.example.localledger.ui.theme.LocalLedgerDarkTheme
 import com.example.localledger.ui.theme.amountColor
@@ -698,7 +699,7 @@ private fun IncomeExpenseTrendChart(
                     modifier = Modifier
                         .then(
                             if (scrollable) {
-                                Modifier.horizontalScroll(rememberScrollState())
+                                Modifier.claimPagerHorizontalGesture().horizontalScroll(rememberScrollState())
                             } else {
                                 Modifier.fillMaxWidth()
                             },
