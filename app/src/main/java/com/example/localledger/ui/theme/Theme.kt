@@ -1,7 +1,9 @@
 package com.example.localledger.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -10,7 +12,9 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.localledger.core.storage.ThemeMode
 import com.example.localledger.domain.model.TransactionType
@@ -22,8 +26,11 @@ val ExpenseColorDark = Color(0xFFF08A80)
 val IncomeColorDark = Color(0xFF7ED0AE)
 val TransferColorDark = Color(0xFF9FB0BF)
 
+val BrandGreen = Color(0xFF2E5D4B)
+val BrandGold = Color(0xFFE0B15A)
+
 private val LightColors = lightColorScheme(
-    primary = Color(0xFF2E5D4B),
+    primary = BrandGreen,
     onPrimary = Color(0xFFFFFFFF),
     primaryContainer = Color(0xFFD0E8DC),
     onPrimaryContainer = Color(0xFF0B2A1E),
@@ -79,17 +86,6 @@ fun amountColorFor(dark: Boolean, type: TransactionType): Color = when (type) {
 
 fun chartPalette(dark: Boolean): List<Color> = if (dark) ChartColorsDark else ChartColorsLight
 
-private val AppTypography = Typography(
-    displaySmall = TextStyle(
-        fontSize = 36.sp,
-        lineHeight = 44.sp,
-        lineHeightStyle = LineHeightStyle(
-            alignment = LineHeightStyle.Alignment.Center,
-            trim = LineHeightStyle.Trim.None,
-        ),
-    ),
-)
-
 private val DarkColors = darkColorScheme(
     primary = Color(0xFFA9D3BF),
     onPrimary = Color(0xFF0B2A1E),
@@ -114,6 +110,40 @@ private val DarkColors = darkColorScheme(
     onError = Color(0xFF690005),
 )
 
+val AppTypography = Typography(
+    displayLarge = TextStyle(fontSize = 57.sp, lineHeight = 64.sp, fontWeight = FontWeight.Normal),
+    displayMedium = TextStyle(fontSize = 45.sp, lineHeight = 52.sp, fontWeight = FontWeight.Normal),
+    displaySmall = TextStyle(
+        fontSize = 36.sp,
+        lineHeight = 44.sp,
+        fontWeight = FontWeight.SemiBold,
+        lineHeightStyle = LineHeightStyle(
+            alignment = LineHeightStyle.Alignment.Center,
+            trim = LineHeightStyle.Trim.None,
+        ),
+    ),
+    headlineLarge = TextStyle(fontSize = 32.sp, lineHeight = 40.sp, fontWeight = FontWeight.SemiBold),
+    headlineMedium = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.SemiBold),
+    headlineSmall = TextStyle(fontSize = 24.sp, lineHeight = 32.sp, fontWeight = FontWeight.SemiBold),
+    titleLarge = TextStyle(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold),
+    titleMedium = TextStyle(fontSize = 16.sp, lineHeight = 24.sp, fontWeight = FontWeight.SemiBold),
+    titleSmall = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium),
+    bodyLarge = TextStyle(fontSize = 16.sp, lineHeight = 24.sp, fontWeight = FontWeight.Normal),
+    bodyMedium = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Normal),
+    bodySmall = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Normal),
+    labelLarge = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium),
+    labelMedium = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium),
+    labelSmall = TextStyle(fontSize = 11.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium),
+)
+
+val AppShapes = Shapes(
+    extraSmall = RoundedCornerShape(8.dp),
+    small = RoundedCornerShape(12.dp),
+    medium = RoundedCornerShape(16.dp),
+    large = RoundedCornerShape(20.dp),
+    extraLarge = RoundedCornerShape(28.dp),
+)
+
 @Composable
 fun amountColor(type: TransactionType): Color = amountColorFor(LocalLedgerDarkTheme.current, type)
 
@@ -131,6 +161,7 @@ fun LocalLedgerTheme(
         MaterialTheme(
             colorScheme = if (dark) DarkColors else LightColors,
             typography = AppTypography,
+            shapes = AppShapes,
             content = content,
         )
     }

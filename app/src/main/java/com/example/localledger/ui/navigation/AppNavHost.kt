@@ -1,27 +1,28 @@
 package com.example.localledger.ui.navigation
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -106,6 +107,34 @@ private val topLevelDestinations = listOf(
     TopLevelDestination(Routes.SETTINGS, "设置", Icons.Default.Settings),
 )
 
+private val topLevelRoutes = topLevelDestinations.map { it.matchRoute }.toSet()
+
+private fun isTopLevelRoute(route: String?) = route in topLevelRoutes
+
+@Composable
+private fun RowScope.TopLevelNavItem(
+    destination: TopLevelDestination,
+    currentRoute: String?,
+    navController: NavHostController,
+) {
+    NavigationBarItem(
+        selected = currentRoute == destination.matchRoute,
+        onClick = {
+            navController.navigate(destination.route) {
+                popUpTo(navController.graph.findStartDestination().id) {
+                    saveState = true
+                }
+                launchSingleTop = true
+                restoreState = true
+            }
+        },
+        icon = {
+            Icon(destination.icon, contentDescription = destination.label)
+        },
+        label = { Text(destination.label) },
+    )
+}
+
 @Composable
 fun AppNavHost(appSession: AppSession) {
     val navController = rememberNavController()
@@ -136,6 +165,34 @@ fun AppNavHost(appSession: AppSession) {
             navController = navController,
             startDestination = Routes.HOME,
             modifier = Modifier.padding(padding),
+            enterTransition = {
+                if (isTopLevelRoute(initialState.destination.route) && isTopLevelRoute(targetState.destination.route)) {
+                    fadeIn(tween(220))
+                } else {
+                    slideInHorizontally(tween(280)) { it } + fadeIn(tween(180))
+                }
+            },
+            exitTransition = {
+                if (isTopLevelRoute(initialState.destination.route) && isTopLevelRoute(targetState.destination.route)) {
+                    fadeOut(tween(180))
+                } else {
+                    slideOutHorizontally(tween(280)) { -it / 4 } + fadeOut(tween(180))
+                }
+            },
+            popEnterTransition = {
+                if (isTopLevelRoute(initialState.destination.route) && isTopLevelRoute(targetState.destination.route)) {
+                    fadeIn(tween(220))
+                } else {
+                    slideInHorizontally(tween(280)) { -it / 4 } + fadeIn(tween(180))
+                }
+            },
+            popExitTransition = {
+                if (isTopLevelRoute(initialState.destination.route) && isTopLevelRoute(targetState.destination.route)) {
+                    fadeOut(tween(180))
+                } else {
+                    slideOutHorizontally(tween(280)) { it } + fadeOut(tween(180))
+                }
+            },
         ) {
             composable(Routes.HOME) {
                 HomeScreen(appSession = appSession, navController = navController)
@@ -237,18 +294,11 @@ internal fun LedgerBottomBar(
             selected = false,
             onClick = onCreate,
             icon = {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary),
-                    contentAlignment = Alignment.Center,
+                FilledIconButton(
+                    onClick = onCreate,
+                    modifier = Modifier.size(48.dp),
                 ) {
-                    Icon(
-                        Icons.Default.Add,
-                        contentDescription = "记一笔",
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                    )
+                    Icon(Icons.Default.Add, contentDescription = null)
                 }
             },
             label = { Text("记一笔") },
