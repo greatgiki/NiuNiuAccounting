@@ -5,14 +5,13 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -24,7 +23,6 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -98,7 +96,7 @@ object Routes {
     }
 }
 
-private data class TopLevelDestination(
+internal data class TopLevelDestination(
     val route: String,
     val label: String,
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -163,23 +161,19 @@ fun AppNavHost(appSession: AppSession, pendingNavigation: PendingNavigation) {
     Scaffold(
         bottomBar = {
             if (isTopLevel) {
-                NavigationBar {
-                    TopLevelNavItem(topLevelDestinations[0], currentRoute, navController)
-                    TopLevelNavItem(topLevelDestinations[1], currentRoute, navController)
-                    Box(
-                        modifier = Modifier.weight(1f),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        FilledIconButton(
-                            onClick = { navController.navigate(Routes.transactionNew()) },
-                            modifier = Modifier.size(48.dp),
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = "记一笔")
+                LedgerBottomBar(
+                    currentRoute = currentRoute,
+                    onNavigate = { destination ->
+                        navController.navigate(destination.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
                         }
-                    }
-                    TopLevelNavItem(topLevelDestinations[2], currentRoute, navController)
-                    TopLevelNavItem(topLevelDestinations[3], currentRoute, navController)
-                }
+                    },
+                    onCreate = { navController.navigate(Routes.transactionNew()) },
+                )
             }
         },
     ) { padding ->
@@ -302,6 +296,45 @@ fun AppNavHost(appSession: AppSession, pendingNavigation: PendingNavigation) {
             ) {
                 TransactionEditorScreen(appSession = appSession, navController = navController)
             }
+        }
+    }
+}
+
+@Composable
+internal fun LedgerBottomBar(
+    currentRoute: String?,
+    onNavigate: (TopLevelDestination) -> Unit,
+    onCreate: () -> Unit,
+) {
+    NavigationBar {
+        topLevelDestinations.take(2).forEach { destination ->
+            NavigationBarItem(
+                selected = currentRoute == destination.matchRoute,
+                onClick = { onNavigate(destination) },
+                icon = { Icon(destination.icon, contentDescription = destination.label) },
+                label = { Text(destination.label) },
+            )
+        }
+        NavigationBarItem(
+            selected = false,
+            onClick = onCreate,
+            icon = {
+                FilledIconButton(
+                    onClick = onCreate,
+                    modifier = Modifier.size(48.dp),
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                }
+            },
+            label = { Text("记一笔") },
+        )
+        topLevelDestinations.drop(2).forEach { destination ->
+            NavigationBarItem(
+                selected = currentRoute == destination.matchRoute,
+                onClick = { onNavigate(destination) },
+                icon = { Icon(destination.icon, contentDescription = destination.label) },
+                label = { Text(destination.label) },
+            )
         }
     }
 }
