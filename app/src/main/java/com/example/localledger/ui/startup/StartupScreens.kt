@@ -1,5 +1,6 @@
 package com.example.localledger.ui.startup
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -16,8 +17,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.example.localledger.R
+import com.example.localledger.ui.theme.LocalLedgerTheme
 
 @Composable
 fun InitializationLoadingScreen() {
@@ -26,8 +31,14 @@ fun InitializationLoadingScreen() {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        CircularProgressIndicator(modifier = Modifier.size(48.dp))
+        Image(
+            painter = painterResource(R.drawable.ic_onboarding_cow),
+            contentDescription = "牛牛记账",
+            modifier = Modifier.size(120.dp),
+        )
         Spacer(Modifier.height(24.dp))
+        CircularProgressIndicator(modifier = Modifier.size(36.dp))
+        Spacer(Modifier.height(16.dp))
         Text("正在准备本地账本…", style = MaterialTheme.typography.bodyLarge)
     }
 }
@@ -63,6 +74,12 @@ fun DataLossNoticeScreen(onAcknowledge: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
+        Image(
+            painter = painterResource(R.drawable.ic_onboarding_cow),
+            contentDescription = "牛牛记账",
+            modifier = Modifier.size(140.dp),
+        )
+        Spacer(Modifier.height(20.dp))
         Text(
             "数据只保存在本机",
             style = MaterialTheme.typography.headlineSmall,
@@ -81,5 +98,21 @@ fun DataLossNoticeScreen(onAcknowledge: () -> Unit) {
         Button(onClick = onAcknowledge, modifier = Modifier.fillMaxWidth()) {
             Text("我已了解，开始使用")
         }
+    }
+}
+
+@Preview(showBackground = true, widthDp = 360, heightDp = 720)
+@Composable
+private fun DataLossNoticePreview() {
+    LocalLedgerTheme {
+        DataLossNoticeScreen(onAcknowledge = {})
+    }
+}
+
+@Preview(showBackground = true, widthDp = 360, heightDp = 640)
+@Composable
+private fun InitializationLoadingPreview() {
+    LocalLedgerTheme {
+        InitializationLoadingScreen()
     }
 }

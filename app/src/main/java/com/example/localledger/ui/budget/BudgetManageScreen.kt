@@ -1,5 +1,7 @@
 package com.example.localledger.ui.budget
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,26 +11,32 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -47,6 +55,8 @@ import com.example.localledger.domain.model.Budget
 import com.example.localledger.domain.money.CurrencyCatalog
 import com.example.localledger.ui.common.DateTimeFormatters
 import com.example.localledger.ui.common.MoneyFormatter
+import com.example.localledger.ui.component.AmountField
+import com.example.localledger.ui.component.CategoryIconGrid
 import com.example.localledger.ui.component.EmptyState
 import com.example.localledger.ui.component.ErrorState
 import com.example.localledger.ui.component.LoadingState
@@ -89,8 +99,10 @@ fun BudgetManageScreen(
         },
     ) { padding ->
         when {
-            state.isLoading -> LoadingState()
-            state.error != null -> ErrorState(state.error ?: "读取预算失败", onRetry = viewModel::retry)
+            state.isLoading -> Box(Modifier.fillMaxSize().padding(padding)) { LoadingState() }
+            state.error != null -> Box(Modifier.fillMaxSize().padding(padding)) {
+                ErrorState(state.error ?: "读取预算失败", onRetry = viewModel::retry)
+            }
             else -> LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
             ) {
@@ -116,7 +128,10 @@ fun BudgetManageScreen(
                     item { EmptyState("这个月还没有预算") }
                 }
                 items(state.lines, key = { it.id }) { line ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.animateItem(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Column(modifier = Modifier.weight(1f)) {
                             BudgetProgressRow(line, state.currencyCode)
                         }
@@ -160,6 +175,7 @@ fun BudgetManageScreen(
 
 internal data class BudgetEditor(val existing: Budget?, val categoryId: String?)
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun BudgetEditDialog(
     target: BudgetEditor,
@@ -173,36 +189,60 @@ internal fun BudgetEditDialog(
     var amount by remember {
         mutableStateOf(target.existing?.let { MoneyFormatter.minorToInput(it.amountMinor, currencyCode) } ?: "")
     }
-    AlertDialog(
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        title = { Text(if (target.existing == null) "新建预算" else "编辑预算") },
-        text = {
-            Column {
-                Row {
-                    TextButton(onClick = { total = true }) { Text(if (total) "总预算 ✓" else "总预算") }
-                    TextButton(onClick = { total = false }) { Text(if (!total) "分类预算 ✓" else "分类预算") }
-                }
-                if (!total) {
-                    categories.forEach { category ->
-                        TextButton(onClick = { categoryId = category.id }) {
-                            Text(if (categoryId == category.id) "● ${category.name}" else category.name)
-                        }
-                    }
-                }
-                OutlinedTextField(
-                    value = amount,
-                    onValueChange = { amount = it },
-                    label = { Text("预算金额") },
-                    singleLine = true,
+        sheetState = sheetState,
+        shape = MaterialTheme.shapes.extraLarge,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 28.dp),
+        ) {
+            Text(
+                if (target.existing == null) "新建预算" else "编辑预算",
+                style = MaterialTheme.typography.titleLarge,
+            )
+            Spacer(Modifier.height(12.dp))
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                SegmentedButton(
+                    selected = total,
+                    onClick = { total = true },
+                    shape = SegmentedButtonDefaults.itemShape(0, 2),
+                ) { Text("总预算") }
+                SegmentedButton(
+                    selected = !total,
+                    onClick = { total = false },
+                    shape = SegmentedButtonDefaults.itemShape(1, 2),
+                ) { Text("分类预算") }
+            }
+            if (!total) {
+                Spacer(Modifier.height(12.dp))
+                Text("分类", style = MaterialTheme.typography.titleSmall)
+                CategoryIconGrid(
+                    categories = categories,
+                    selectedId = categoryId,
+                    onSelect = { categoryId = it },
                 )
             }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onConfirm(if (total) null else categoryId, amount) },
-                enabled = amount.isNotBlank() && (total || categoryId != null),
-            ) { Text("保存") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
-    )
+            Spacer(Modifier.height(12.dp))
+            AmountField(
+                value = amount,
+                onValueChange = { amount = it },
+                label = "预算金额",
+                currencyCode = currencyCode,
+            )
+            Spacer(Modifier.height(16.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = onDismiss) { Text("取消") }
+                Button(
+                    onClick = { onConfirm(if (total) null else categoryId, amount) },
+                    enabled = amount.isNotBlank() && (total || categoryId != null),
+                ) { Text("保存") }
+            }
+        }
+    }
 }
