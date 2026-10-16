@@ -10,6 +10,8 @@ import com.example.localledger.domain.model.AccountType
 import com.example.localledger.domain.money.CurrencyCatalog
 import com.example.localledger.domain.repository.AccountRepository
 import com.example.localledger.ui.AppSession
+import com.example.localledger.ui.common.UiOutcome
+import com.example.localledger.ui.common.runOutcome
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
@@ -63,7 +65,7 @@ class AccountManageViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AccountManageUiState())
 
-    fun save(
+    suspend fun save(
         existing: Account?,
         ledgerId: String,
         name: String,
@@ -71,15 +73,12 @@ class AccountManageViewModel @Inject constructor(
         initialBalanceText: String,
         sortOrderText: String,
         currencyCode: String,
-    ) {
+    ): UiOutcome {
         val initialBalance = try {
             val digits = CurrencyCatalog.of(currencyCode).minorDigits
             MoneyParser.toSignedMinor(initialBalanceText.ifBlank { "0" }, digits)
         } catch (error: LedgerException) {
-            viewModelScope.launch {
-                effectChannel.send(AccountEffect.ShowMessage("初始余额格式不正确"))
-            }
-            return
+            return UiOutcome.Failure("初始余额格式不正确")
         }
         val now = System.currentTimeMillis()
         val account = Account(
@@ -94,24 +93,11 @@ class AccountManageViewModel @Inject constructor(
             createdAt = existing?.createdAt ?: now,
             updatedAt = now,
         )
-        viewModelScope.launch {
-            try {
-                accountRepository.saveAccount(account)
-            } catch (error: LedgerException) {
-                effectChannel.send(AccountEffect.ShowMessage(error.message ?: "保存账户失败"))
-            }
-        }
+        return runOutcome("保存账户失败") { accountRepository.saveAccount(account) }
     }
 
-    fun archive(accountId: String) {
-        viewModelScope.launch {
-            try {
-                accountRepository.archiveAccount(accountId)
-            } catch (error: LedgerException) {
-                effectChannel.send(AccountEffect.ShowMessage(error.message ?: "停用账户失败"))
-            }
-        }
-    }
+    suspend fun archive(accountId: String): UiOutcome =
+        runOutcome("停用账户失败") { accountRepository.archiveAccount(accountId) }
 
     fun retry() { refreshFlow.value += 1 }
 }
