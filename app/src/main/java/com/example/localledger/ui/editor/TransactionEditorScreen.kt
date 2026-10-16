@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -53,11 +54,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -73,6 +77,7 @@ import com.example.localledger.ui.component.AmountField
 import com.example.localledger.ui.component.CategoryIconGrid
 import com.example.localledger.ui.component.ConfirmDeleteDialog
 import com.example.localledger.ui.component.LoadingState
+import com.example.localledger.ui.component.SubmitGate
 import com.example.localledger.ui.theme.LocalLedgerTheme
 import com.example.localledger.ui.theme.amountColor
 import java.time.Instant
@@ -89,6 +94,8 @@ fun TransactionEditorScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    val deleteGate = remember { SubmitGate() }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         viewModel.effects.collect { effect ->
@@ -139,11 +146,19 @@ fun TransactionEditorScreen(
         ConfirmDeleteDialog(
             title = "删除这条记录？",
             message = "删除后无法恢复，相关账户余额和统计会立即更新。",
+            submitting = deleteGate.submitting,
+            errorMessage = deleteGate.error,
             onConfirm = {
-                showDeleteConfirm = false
-                viewModel.delete()
+                deleteGate.launch(scope, { viewModel.delete() }) {
+                    showDeleteConfirm = false
+                }
             },
-            onDismiss = { showDeleteConfirm = false },
+            onDismiss = {
+                if (!deleteGate.submitting) {
+                    deleteGate.reset()
+                    showDeleteConfirm = false
+                }
+            },
         )
     }
 }
@@ -286,11 +301,11 @@ private fun EditorContent(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(
                     onClick = { showDatePicker = true },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).heightIn(min = 48.dp),
                 ) {
                     Icon(
                         Icons.Default.DateRange,
-                        contentDescription = null,
+                        contentDescription = "选择日期",
                         modifier = Modifier.size(18.dp),
                     )
                     Spacer(Modifier.width(6.dp))
@@ -303,11 +318,11 @@ private fun EditorContent(
                 }
                 OutlinedButton(
                     onClick = { showTimePicker = true },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).heightIn(min = 48.dp),
                 ) {
                     Icon(
                         Icons.Default.AccessTime,
-                        contentDescription = null,
+                        contentDescription = "选择时间",
                         modifier = Modifier.size(18.dp),
                     )
                     Spacer(Modifier.width(6.dp))
@@ -334,7 +349,7 @@ private fun EditorContent(
             onSave = viewModel::save,
             saveEnabled = state.canSave && !input.saving,
             saveLabel = when {
-                input.saving -> "…"
+                input.saving -> "保存中…"
                 state.isEdit -> "完成"
                 else -> "保存"
             },
@@ -407,7 +422,7 @@ internal fun AmountKeypad(
     saveEnabled: Boolean = true,
     saveLabel: String = "保存",
 ) {
-    val keyHeight = 44.dp
+    val keyHeight = 48.dp
     val gap = 6.dp
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(gap)) {
         Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
@@ -479,7 +494,9 @@ private fun KeypadKey(
         color = if (enabled) container else container.copy(alpha = 0.45f),
         contentColor = contentColor,
         interactionSource = interaction,
-        modifier = modifier.scale(scale),
+        modifier = modifier
+            .scale(scale)
+            .semantics { contentDescription = if (label.isEmpty()) "退格" else label },
     ) {
         Box(contentAlignment = Alignment.Center) {
             if (icon != null) {

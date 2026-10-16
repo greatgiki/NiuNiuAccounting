@@ -8,12 +8,15 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -44,6 +47,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -64,7 +68,6 @@ import com.example.localledger.domain.model.TransactionType
 import com.example.localledger.ui.AppSession
 import com.example.localledger.domain.money.RatioMath
 import com.example.localledger.ui.common.CategoryIcons
-import com.example.localledger.ui.common.ChartPalette
 import com.example.localledger.ui.common.MoneyFormatter
 import com.example.localledger.ui.home.BudgetProgressRow
 import com.example.localledger.ui.component.EmptyState
@@ -75,7 +78,9 @@ import com.example.localledger.ui.component.SummaryAmountRow
 import com.example.localledger.ui.home.SectionTitle
 import com.example.localledger.ui.navigation.Routes
 import com.example.localledger.ui.navigation.navigateToTransactions
+import com.example.localledger.ui.theme.LocalLedgerDarkTheme
 import com.example.localledger.ui.theme.amountColor
+import com.example.localledger.ui.theme.chartPalette
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.Instant
@@ -138,13 +143,16 @@ fun StatisticsScreen(
                 } else {
                     state.categories.take(8)
                 }
+                val expenseTotal = remember(state.categories) {
+                    state.categories.fold(0L) { acc, item -> Math.addExact(acc, item.amountMinor) }
+                }
                 ExpenseShareChart(
                     categories = state.categories,
                     currencyCode = state.currencyCode,
                 )
                 ExpenseCategoryBars(
                     categories = shown,
-                    totalMinor = state.categories.fold(0L) { acc, item -> Math.addExact(acc, item.amountMinor) },
+                    totalMinor = expenseTotal,
                     currencyCode = state.currencyCode,
                     useSliceColors = true,
                     onCategoryClick = { categoryId ->
@@ -162,11 +170,14 @@ fun StatisticsScreen(
             if (state.incomeCategories.isEmpty()) {
                 EmptyState("当前时间范围内没有收入")
             } else {
+                val incomeTotal = remember(state.incomeCategories) {
+                    state.incomeCategories.fold(0L) { acc, item -> Math.addExact(acc, item.amountMinor) }
+                }
                 ExpenseCategoryBars(
                     categories = state.incomeCategories,
-                    totalMinor = state.incomeCategories.fold(0L) { acc, item -> Math.addExact(acc, item.amountMinor) },
+                    totalMinor = incomeTotal,
                     currencyCode = state.currencyCode,
-                    barColor = androidx.compose.ui.graphics.Color(0xFF2F6F4E),
+                    barColor = amountColor(TransactionType.INCOME),
                     onCategoryClick = { categoryId ->
                         val (start, end) = periodDates(state.period)
                         navController.navigateToTransactions(
@@ -202,6 +213,7 @@ fun StatisticsScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .heightIn(min = 48.dp)
                             .clickable { navController.navigate(Routes.ACCOUNTS) }
                             .padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -220,7 +232,7 @@ fun StatisticsScreen(
                     HorizontalDivider()
                 }
             }
-            Spacer(Modifier.height(96.dp))
+            Spacer(Modifier.height(24.dp))
         }
     }
 
@@ -398,92 +410,129 @@ private fun PeriodPickerDialog(
 }
 
 @Composable
-private fun ExpenseShareChart(
+internal fun ExpenseShareChart(
     categories: List<com.example.localledger.domain.model.CategoryTotal>,
     currencyCode: String,
 ) {
-    val total = categories.fold(0L) { acc, item -> Math.addExact(acc, item.amountMinor) }
-    val slices = if (categories.size <= 8) {
-        categories.map { it.categoryName to it.amountMinor }
-    } else {
-        val rest = categories.drop(7).fold(0L) { acc, item -> Math.addExact(acc, item.amountMinor) }
-        categories.take(7).map { it.categoryName to it.amountMinor } + ("其他" to rest)
+    val total = remember(categories) {
+        categories.fold(0L) { acc, item -> Math.addExact(acc, item.amountMinor) }
     }
+    val slices = remember(categories) {
+        if (categories.size <= 8) {
+            categories.map { it.categoryName to it.amountMinor }
+        } else {
+            val rest = categories.drop(7).fold(0L) { acc, item -> Math.addExact(acc, item.amountMinor) }
+            categories.take(7).map { it.categoryName to it.amountMinor } + ("其他" to rest)
+        }
+    }
+    val colors = chartPalette(LocalLedgerDarkTheme.current)
     val progress = remember { Animatable(0f) }
     LaunchedEffect(slices) {
         progress.snapTo(0f)
         progress.animateTo(1f, tween(700))
     }
-    val totalLabel = "总支出 ${MoneyFormatter.format(total, currencyCode)}"
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            modifier = Modifier.size(148.dp),
-            contentAlignment = Alignment.Center,
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+        if (maxWidth < 360.dp) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                ShareDonut(slices, total, colors, currencyCode, progress.value)
+                ShareLegend(slices, total, colors, currencyCode, modifier = Modifier.fillMaxWidth())
+            }
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ShareDonut(slices, total, colors, currencyCode, progress.value)
+                Spacer(Modifier.width(12.dp))
+                ShareLegend(slices, total, colors, currencyCode, modifier = Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ShareDonut(
+    slices: List<Pair<String, Long>>,
+    total: Long,
+    colors: List<Color>,
+    currencyCode: String,
+    progress: Float,
+) {
+    Box(modifier = Modifier.size(148.dp), contentAlignment = Alignment.Center) {
+        Canvas(
+            modifier = Modifier.fillMaxSize().semantics {
+                contentDescription = "支出分类占比，共${slices.size}项"
+            },
         ) {
-            Canvas(
-                modifier = Modifier.fillMaxSize().semantics {
-                    contentDescription = "支出分类占比，共${slices.size}项，$totalLabel"
-                },
-            ) {
-                val stroke = Stroke(width = 22.dp.toPx(), cap = StrokeCap.Butt)
-                val inset = stroke.width / 2f
-                val arcSize = Size(size.width - stroke.width, size.height - stroke.width)
-                val topLeft = Offset(inset, inset)
-                if (total <= 0L) {
+            val stroke = Stroke(width = 22.dp.toPx(), cap = StrokeCap.Butt)
+            val inset = stroke.width / 2f
+            val arcSize = Size(size.width - stroke.width, size.height - stroke.width)
+            val topLeft = Offset(inset, inset)
+            if (total <= 0L || slices.isEmpty()) {
+                drawArc(
+                    color = colors.last(),
+                    startAngle = 0f,
+                    sweepAngle = 360f,
+                    useCenter = false,
+                    topLeft = topLeft,
+                    size = arcSize,
+                    style = stroke,
+                )
+            } else {
+                var start = -90f
+                slices.forEachIndexed { index, (_, amount) ->
+                    val fullSweep = RatioMath.fraction(amount, total) * 360f
                     drawArc(
-                        color = ChartPalette.color(7),
-                        startAngle = 0f,
-                        sweepAngle = 360f,
+                        color = colors[index % colors.size],
+                        startAngle = start,
+                        sweepAngle = fullSweep * progress,
                         useCenter = false,
                         topLeft = topLeft,
                         size = arcSize,
                         style = stroke,
                     )
-                } else {
-                    var start = -90f
-                    slices.forEachIndexed { index, (_, amount) ->
-                        val fullSweep = RatioMath.fraction(amount, total) * 360f
-                        drawArc(
-                            color = ChartPalette.color(index),
-                            startAngle = start,
-                            sweepAngle = fullSweep * progress.value,
-                            useCenter = false,
-                            topLeft = topLeft,
-                            size = arcSize,
-                            style = stroke,
-                        )
-                        start += fullSweep
-                    }
+                    start += fullSweep
                 }
-            }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    "总支出",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    MoneyFormatter.format(total, currencyCode),
-                    style = MaterialTheme.typography.titleSmall,
-                    textAlign = TextAlign.Center,
-                )
             }
         }
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            slices.forEachIndexed { index, (name, amount) ->
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
-                    Canvas(modifier = Modifier.size(8.dp)) { drawCircle(ChartPalette.color(index)) }
-                    Spacer(Modifier.width(6.dp))
-                    Text(name, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), maxLines = 1)
-                    Text(
-                        "${RatioMath.percentLabel(amount, total)} ${MoneyFormatter.format(amount, currencyCode)}",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                "总支出",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                MoneyFormatter.format(total, currencyCode),
+                style = MaterialTheme.typography.titleSmall,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ShareLegend(
+    slices: List<Pair<String, Long>>,
+    total: Long,
+    colors: List<Color>,
+    currencyCode: String,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        slices.forEachIndexed { index, (name, amount) ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+            ) {
+                Canvas(modifier = Modifier.size(8.dp)) { drawCircle(colors[index % colors.size]) }
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    name,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                )
+                Text(
+                    "${RatioMath.percentLabel(amount, total)} ${MoneyFormatter.format(amount, currencyCode)}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
         }
     }
@@ -494,7 +543,7 @@ internal fun ExpenseCategoryBars(
     categories: List<com.example.localledger.domain.model.CategoryTotal>,
     totalMinor: Long,
     currencyCode: String,
-    barColor: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color(0xFFC4392F),
+    barColor: Color = amountColor(TransactionType.EXPENSE),
     useSliceColors: Boolean = false,
     onCategoryClick: (String) -> Unit,
 ) {
@@ -504,15 +553,18 @@ internal fun ExpenseCategoryBars(
         progress.animateTo(1f, tween(700))
     }
     val track = MaterialTheme.colorScheme.surfaceVariant
+    val sliceColors = chartPalette(LocalLedgerDarkTheme.current)
     Column {
         categories.forEachIndexed { index, category ->
             val fraction = RatioMath.fraction(category.amountMinor, totalMinor)
-            val slice = if (useSliceColors) ChartPalette.color(index) else barColor
+            val slice = if (useSliceColors) sliceColors[index % sliceColors.size] else barColor
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .heightIn(min = 48.dp)
                     .clickable { onCategoryClick(category.categoryId) }
-                    .padding(vertical = 6.dp),
+                    .padding(vertical = 6.dp)
+                    .semantics { contentDescription = "${category.categoryName} ${RatioMath.percentLabel(category.amountMinor, totalMinor)}" },
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(
@@ -574,9 +626,10 @@ private fun IncomeExpenseTrendChart(
 ) {
     val incomeColor = amountColor(TransactionType.INCOME)
     val expenseColor = amountColor(TransactionType.EXPENSE)
-    val maxValue = points.maxOf { maxOf(it.incomeMinor, it.expenseMinor) }.coerceAtLeast(1)
-    val description = "收支趋势图，共${points.size}个时间点，可横向滑动，点击查看对应明细"
-    val scrollable = points.size > 8
+    val maxValue = remember(points) {
+        points.maxOf { maxOf(it.incomeMinor, it.expenseMinor) }.coerceAtLeast(1)
+    }
+    val description = "收支趋势图，共${points.size}个时间点。窄屏可横向滑动，点击收入或支出柱查看明细"
     var selected by remember { mutableStateOf<TrendSelection?>(null) }
     val progress = remember { Animatable(0f) }
     LaunchedEffect(points) {
@@ -620,61 +673,76 @@ private fun IncomeExpenseTrendChart(
                 }
             }
         }
-        Box(modifier = Modifier.fillMaxWidth().height(168.dp)) {
-            Canvas(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(128.dp)
-                    .align(Alignment.TopStart),
-            ) {
-                val lines = 3
-                repeat(lines) { index ->
-                    val y = if (lines == 1) 0f else size.height * index / (lines - 1)
-                    drawLine(
-                        color = gridColor,
-                        start = Offset(0f, y),
-                        end = Offset(size.width, y),
-                        strokeWidth = 1.dp.toPx(),
-                    )
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val minPointWidth = 48.dp
+            val scrollable = points.size > 8 || maxWidth < minPointWidth * points.size
+            Box(modifier = Modifier.fillMaxWidth().height(168.dp)) {
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(128.dp)
+                        .align(Alignment.TopStart),
+                ) {
+                    val lines = 3
+                    repeat(lines) { index ->
+                        val y = if (lines == 1) 0f else size.height * index / (lines - 1)
+                        drawLine(
+                            color = gridColor,
+                            start = Offset(0f, y),
+                            end = Offset(size.width, y),
+                            strokeWidth = 1.dp.toPx(),
+                        )
+                    }
                 }
-            }
-            Row(
-                modifier = Modifier
-                    .then(if (scrollable) Modifier.horizontalScroll(rememberScrollState()) else Modifier.fillMaxWidth())
-                    .height(160.dp)
-                    .semantics { contentDescription = description },
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-                verticalAlignment = Alignment.Bottom,
-            ) {
-                points.forEachIndexed { index, point ->
-                    Column(
-                        modifier = if (scrollable) Modifier.width(36.dp) else Modifier.weight(1f),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Bottom,
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.Bottom,
-                            horizontalArrangement = Arrangement.spacedBy(2.dp),
-                            modifier = Modifier.weight(1f, fill = false),
+                Row(
+                    modifier = Modifier
+                        .then(
+                            if (scrollable) {
+                                Modifier.horizontalScroll(rememberScrollState())
+                            } else {
+                                Modifier.fillMaxWidth()
+                            },
+                        )
+                        .height(160.dp)
+                        .semantics { contentDescription = description },
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    verticalAlignment = Alignment.Bottom,
+                ) {
+                    points.forEachIndexed { index, point ->
+                        val showLabel = points.size <= 12 || index % ((points.size / 8) + 1) == 0
+                        Column(
+                            modifier = if (scrollable) Modifier.width(minPointWidth) else Modifier.weight(1f),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Bottom,
                         ) {
-                            TrendBar(point.incomeMinor, maxValue, incomeColor, progress.value) {
-                                selected = TrendSelection(index, TransactionType.INCOME)
+                            Row(
+                                verticalAlignment = Alignment.Bottom,
+                                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                modifier = Modifier.weight(1f, fill = false),
+                            ) {
+                                TrendBar(
+                                    value = point.incomeMinor,
+                                    maxValue = maxValue,
+                                    color = incomeColor,
+                                    progress = progress.value,
+                                    description = "收入 ${point.label}",
+                                    onClick = { selected = TrendSelection(index, TransactionType.INCOME) },
+                                )
+                                TrendBar(
+                                    value = point.expenseMinor,
+                                    maxValue = maxValue,
+                                    color = expenseColor,
+                                    progress = progress.value,
+                                    description = "支出 ${point.label}",
+                                    onClick = { selected = TrendSelection(index, TransactionType.EXPENSE) },
+                                )
                             }
-                            TrendBar(point.expenseMinor, maxValue, expenseColor, progress.value) {
-                                selected = TrendSelection(index, TransactionType.EXPENSE)
-                            }
-                        }
-                        if (points.size <= 12 || point.label.endsWith("1日") ||
-                            points.indexOf(point) % (points.size / 8 + 1) == 0
-                        ) {
                             Text(
-                                point.label,
+                                if (showLabel) point.label else " ",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
                             )
-                        } else {
-                            Text("", style = MaterialTheme.typography.labelSmall)
                         }
                     }
                 }
@@ -689,25 +757,31 @@ private data class TrendSelection(val index: Int, val type: TransactionType)
 private fun TrendBar(
     value: Long,
     maxValue: Long,
-    color: androidx.compose.ui.graphics.Color,
+    color: Color,
     progress: Float,
+    description: String,
     onClick: () -> Unit,
 ) {
     val fraction = RatioMath.fraction(value, maxValue) * progress
-    Canvas(
+    Box(
         modifier = Modifier
-            .width(8.dp)
+            .width(24.dp)
             .height(120.dp)
-            .clickable(onClick = onClick),
+            .heightIn(min = 48.dp)
+            .clickable(onClick = onClick)
+            .semantics { contentDescription = description },
+        contentAlignment = Alignment.BottomCenter,
     ) {
-        val barHeight = (size.height * fraction).coerceAtLeast(if (value > 0) 2f else 0f)
-        val radius = CornerRadius(size.width / 2f, size.width / 2f)
-        drawRoundRect(
-            color = color,
-            topLeft = Offset(0f, size.height - barHeight),
-            size = Size(size.width, barHeight),
-            cornerRadius = radius,
-        )
+        Canvas(modifier = Modifier.width(8.dp).fillMaxHeight()) {
+            val barHeight = (size.height * fraction).coerceAtLeast(if (value > 0) 2f else 0f)
+            val radius = CornerRadius(size.width / 2f, size.width / 2f)
+            drawRoundRect(
+                color = color,
+                topLeft = Offset(0f, size.height - barHeight),
+                size = Size(size.width, barHeight),
+                cornerRadius = radius,
+            )
+        }
     }
 }
 

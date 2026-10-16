@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -39,6 +40,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,11 +52,12 @@ import com.example.localledger.domain.model.Category
 import com.example.localledger.domain.model.CategoryType
 import com.example.localledger.ui.AppSession
 import com.example.localledger.ui.common.CategoryIcons
+import com.example.localledger.ui.component.CollapsibleSectionHeader
 import com.example.localledger.ui.component.ConfirmDeleteDialog
 import com.example.localledger.ui.component.EmptyState
 import com.example.localledger.ui.component.ErrorState
 import com.example.localledger.ui.component.LoadingState
-import com.example.localledger.ui.home.SectionTitle
+import com.example.localledger.ui.component.SubmitGate
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,6 +72,10 @@ fun CategoryManageScreen(
     var editTarget by remember { mutableStateOf<Category?>(null) }
     var showCreate by remember { mutableStateOf(false) }
     var archiveTarget by remember { mutableStateOf<Category?>(null) }
+    var archivedExpanded by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val saveGate = remember { SubmitGate() }
+    val archiveGate = remember { SubmitGate() }
 
     LaunchedEffect(Unit) {
         viewModel.effects.collect { effect ->
@@ -96,7 +103,10 @@ fun CategoryManageScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showCreate = true }) {
+            FloatingActionButton(onClick = {
+                saveGate.reset()
+                showCreate = true
+            }) {
                 Icon(Icons.Default.Add, contentDescription = "新建分类")
             }
         },
@@ -110,22 +120,32 @@ fun CategoryManageScreen(
                 modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
             ) {
                 if (active.isEmpty()) {
-                    item { EmptyState("暂无分类，点击右下角新建") }
+                    item(key = "empty") { EmptyState("暂无分类，点击右下角新建") }
                 }
-                items(active, key = { it.id }) { category ->
+                items(active, key = { it.id }, contentType = { "category" }) { category ->
                     CategoryRow(
                         modifier = Modifier.animateItem(),
                         category = category,
-                        onEdit = { editTarget = category },
+                        onEdit = {
+                            saveGate.reset()
+                            editTarget = category
+                        },
                         onArchive = { archiveTarget = category },
                     )
                     HorizontalDivider()
                 }
                 if (archived.isNotEmpty()) {
-                    item { SectionTitle("已停用") }
-                    items(archived, key = { it.id }) { category ->
+                    item(key = "archived-header") {
+                        CollapsibleSectionHeader(
+                            title = "已停用（${archived.size}）",
+                            expanded = archivedExpanded,
+                            onToggle = { archivedExpanded = !archivedExpanded },
+                        )
+                    }
+                    if (archivedExpanded) {
+                    items(archived, key = { "archived-${it.id}" }, contentType = { "archived-category" }) { category ->
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Icon(
@@ -143,6 +163,7 @@ fun CategoryManageScreen(
                         }
                         HorizontalDivider()
                     }
+                    }
                 }
             }
         }
@@ -151,26 +172,44 @@ fun CategoryManageScreen(
     if (showCreate) {
         CategoryEditDialog(
             category = null,
+            submitting = saveGate.submitting,
+            errorMessage = saveGate.error,
             onConfirm = { name, iconKey, sortText ->
-                session.currentLedgerId?.let { ledgerId ->
+                val ledgerId = session.currentLedgerId ?: return@CategoryEditDialog
+                saveGate.launch(scope, {
                     viewModel.save(null, ledgerId, name, iconKey, sortText)
+                }) {
+                    showCreate = false
                 }
-                showCreate = false
             },
-            onDismiss = { showCreate = false },
+            onDismiss = {
+                if (!saveGate.submitting) {
+                    saveGate.reset()
+                    showCreate = false
+                }
+            },
         )
     }
 
     editTarget?.let { category ->
         CategoryEditDialog(
             category = category,
+            submitting = saveGate.submitting,
+            errorMessage = saveGate.error,
             onConfirm = { name, iconKey, sortText ->
-                session.currentLedgerId?.let { ledgerId ->
+                val ledgerId = session.currentLedgerId ?: return@CategoryEditDialog
+                saveGate.launch(scope, {
                     viewModel.save(category, ledgerId, name, iconKey, sortText)
+                }) {
+                    editTarget = null
                 }
-                editTarget = null
             },
-            onDismiss = { editTarget = null },
+            onDismiss = {
+                if (!saveGate.submitting) {
+                    saveGate.reset()
+                    editTarget = null
+                }
+            },
         )
     }
 
@@ -178,11 +217,18 @@ fun CategoryManageScreen(
         ConfirmDeleteDialog(
             title = "停用分类“${category.name}”？",
             message = "停用后不能再用于新流水，历史流水和统计仍会保留。",
+            confirmLabel = "停用",
+            submitting = archiveGate.submitting,
+            errorMessage = archiveGate.error,
             onConfirm = {
-                archiveTarget = null
-                viewModel.archive(category.id)
+                archiveGate.launch(scope, { viewModel.archive(category.id) }) {
+                    archiveTarget = null
+                }
             },
-            onDismiss = { archiveTarget = null },
+            onDismiss = {
+                archiveGate.reset()
+                archiveTarget = null
+            },
         )
     }
 }
@@ -196,7 +242,7 @@ private fun CategoryRow(
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     Row(
-        modifier = modifier.fillMaxWidth().padding(vertical = 10.dp),
+        modifier = modifier.fillMaxWidth().heightIn(min = 48.dp).padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
@@ -239,6 +285,8 @@ private fun CategoryEditDialog(
     category: Category?,
     onConfirm: (name: String, iconKey: String, sortText: String) -> Unit,
     onDismiss: () -> Unit,
+    submitting: Boolean = false,
+    errorMessage: String? = null,
 ) {
     var name by remember { mutableStateOf(category?.name ?: "") }
     var iconKey by remember { mutableStateOf(category?.iconKey ?: CategoryIcons.fallback.key) }
@@ -279,17 +327,26 @@ private fun CategoryEditDialog(
                     onValueChange = { sortText = it.filter(Char::isDigit).take(5) },
                     label = { Text("排序（数字越小越靠前）") },
                     singleLine = true,
+                    enabled = !submitting,
                 )
+                if (!errorMessage.isNullOrBlank()) {
+                    Text(
+                        errorMessage,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
             }
         },
         confirmButton = {
             TextButton(
-                onClick = { onConfirm(name, iconKey, sortText) },
-                enabled = name.isNotBlank(),
-            ) { Text("保存") }
+                onClick = { if (!submitting) onConfirm(name, iconKey, sortText) },
+                enabled = name.isNotBlank() && !submitting,
+            ) { Text(if (submitting) "保存中…" else "保存") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(onClick = onDismiss, enabled = !submitting) { Text("取消") }
         },
     )
 }

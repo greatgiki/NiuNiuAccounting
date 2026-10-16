@@ -1,34 +1,48 @@
 package com.example.localledger.ui.component
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.localledger.domain.model.TransactionType
 import com.example.localledger.ui.common.CategoryIcons
@@ -54,10 +68,9 @@ fun MoneyText(
     }
     Text(
         text = text,
-        modifier = modifier,
+        modifier = modifier.semantics { contentDescription = text },
         style = style.copy(fontFeatureSettings = "tnum"),
         color = color,
-        maxLines = 1,
     )
 }
 
@@ -140,19 +153,119 @@ fun ConfirmDeleteDialog(
     message: String,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
+    confirmLabel: String = "删除",
+    submitting: Boolean = false,
+    errorMessage: String? = null,
 ) {
     AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Default.Delete, contentDescription = null) },
+        onDismissRequest = { if (!submitting) onDismiss() },
+        icon = { Icon(confirmIcon(confirmLabel), contentDescription = null) },
         title = { Text(title) },
-        text = { Text(message) },
+        text = {
+            Column {
+                Text(message)
+                if (!errorMessage.isNullOrBlank()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        errorMessage,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        },
         confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text("删除", color = MaterialTheme.colorScheme.error)
+            TextButton(
+                onClick = { if (!submitting) onConfirm() },
+                enabled = !submitting,
+            ) {
+                Text(
+                    if (submitting) "处理中…" else confirmLabel,
+                    color = MaterialTheme.colorScheme.error,
+                )
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(onClick = onDismiss, enabled = !submitting) { Text("取消") }
+        },
+    )
+}
+
+private fun confirmIcon(confirmLabel: String): ImageVector = when (confirmLabel) {
+    "归档" -> Icons.Default.Archive
+    "停用" -> Icons.Default.VisibilityOff
+    else -> Icons.Default.Delete
+}
+
+@Composable
+fun CollapsibleSectionHeader(
+    title: String,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val action = if (expanded) "收起$title" else "展开$title"
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clickable(onClick = onToggle),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            title,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        Icon(
+            imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+            contentDescription = action,
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SwipeToDeleteRow(
+    onDeleteRequest: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable RowScope.() -> Unit,
+) {
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            if (value == SwipeToDismissBoxValue.EndToStart) onDeleteRequest()
+            false
+        },
+    )
+    SwipeToDismissBox(
+        state = dismissState,
+        modifier = modifier.semantics { contentDescription = "向左滑动可删除" },
+        enableDismissFromStartToEnd = false,
+        backgroundContent = {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.errorContainer)
+                    .padding(horizontal = 20.dp),
+                contentAlignment = Alignment.CenterEnd,
+            ) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = "删除",
+                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                )
+            }
+        },
+        content = {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.background),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                content()
+            }
         },
     )
 }
@@ -216,7 +329,11 @@ fun TransactionRowContent(
 ) {
     val accent = categoryAccent(iconKey, type)
     Row(
-        modifier = modifier.fillMaxWidth().padding(vertical = 10.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .padding(vertical = 10.dp)
+            .semantics(mergeDescendants = true) {},
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
@@ -239,16 +356,18 @@ fun TransactionRowContent(
         }
         Spacer(Modifier.size(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
+            Text(title, style = MaterialTheme.typography.bodyLarge)
             Text(
                 subtitle,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
             )
         }
         Spacer(Modifier.size(12.dp))
-        Column(horizontalAlignment = Alignment.End) {
+        Column(
+            modifier = Modifier.weight(0.8f),
+            horizontalAlignment = Alignment.End,
+        ) {
             TransactionAmountText(type = type, amountMinor = amountMinor, currencyCode = currencyCode)
             Text(
                 DateTimeFormatters.time(timeMillis, zoneId),
@@ -258,6 +377,3 @@ fun TransactionRowContent(
         }
     }
 }
-
-@Composable
-fun FormRowHeight(): Dp = 56.dp

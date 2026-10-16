@@ -37,6 +37,7 @@ fun AmountField(
     label: String,
     currencyCode: String,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
 ) {
     OutlinedTextField(
         value = value,
@@ -45,6 +46,7 @@ fun AmountField(
         prefix = { Text(CurrencyCatalog.symbol(currencyCode)) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
         singleLine = true,
+        enabled = enabled,
         modifier = modifier.fillMaxWidth(),
     )
 }
