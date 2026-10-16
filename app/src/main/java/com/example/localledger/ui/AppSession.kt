@@ -96,6 +96,10 @@ class AppSession @Inject constructor(
         settingsFlow.value = settingsStore.update { it.copy(hasAcknowledgedDataLoss = true) }
     }
 
+    suspend fun updateSettings(transform: (com.example.localledger.core.storage.AppSettings) -> com.example.localledger.core.storage.AppSettings) {
+        settingsFlow.value = settingsStore.update(transform)
+    }
+
     suspend fun recordLastAccount(ledgerId: String, accountId: String) {
         settingsFlow.value = settingsStore.update { current ->
             current.copy(

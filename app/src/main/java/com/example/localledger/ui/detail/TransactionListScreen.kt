@@ -56,6 +56,7 @@ import com.example.localledger.ui.component.LoadingState
 import com.example.localledger.ui.component.TransactionRowContent
 import com.example.localledger.ui.home.transactionSubtitle
 import com.example.localledger.ui.home.transactionTitle
+import com.example.localledger.ui.importing.PendingDraftBanner
 import com.example.localledger.ui.navigation.Routes
 import java.time.Instant
 import java.time.LocalDate
@@ -83,6 +84,7 @@ fun TransactionListScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+        PendingDraftBanner(navController)
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
             verticalAlignment = Alignment.CenterVertically,

@@ -17,7 +17,9 @@ import androidx.compose.material.icons.automirrored.filled.TrendingDown
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.EventRepeat
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material3.AlertDialog
@@ -85,6 +87,13 @@ fun SettingsScreen(
             SettingsEntry("预算", Icons.Default.Savings) { navController.navigate(Routes.BUDGETS) }
             HorizontalDivider()
             SettingsEntry("周期记账", Icons.Default.EventRepeat) { navController.navigate(Routes.RECURRING) }
+        }
+
+        SectionTitle("账单")
+        Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
+            SettingsEntry("导入账单", Icons.Default.FileDownload) { navController.navigate(Routes.IMPORT) }
+            HorizontalDivider()
+            SettingsEntry("自动记账", Icons.Default.Notifications) { navController.navigate(Routes.AUTO_RECORD) }
         }
 
         ExchangeRateSection()

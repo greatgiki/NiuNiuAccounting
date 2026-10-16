@@ -5,6 +5,8 @@ import androidx.room.Query
 import androidx.room.Upsert
 import com.example.localledger.data.local.entity.TransactionEntity
 import com.example.localledger.data.local.model.CategoryTotalRow
+import com.example.localledger.data.local.model.ExternalKeyRow
+import com.example.localledger.data.local.model.FuzzyTransactionRow
 import com.example.localledger.data.local.model.IncomeExpenseSummaryRow
 import com.example.localledger.data.local.model.TransactionDetailRow
 import com.example.localledger.data.local.model.TrendSourceRow
@@ -35,6 +37,45 @@ interface TransactionDao {
 
     @Query("SELECT * FROM transactions WHERE ledger_id = :ledgerId ORDER BY transaction_at ASC, created_at ASC")
     suspend fun listByLedger(ledgerId: String): List<TransactionEntity>
+
+    @Query(
+        """
+        SELECT external_source, external_id
+        FROM transactions
+        WHERE ledger_id = :ledgerId AND external_id IS NOT NULL AND external_source IS NOT NULL
+        """,
+    )
+    suspend fun listExternalKeys(ledgerId: String): List<ExternalKeyRow>
+
+    @Query(
+        """
+        SELECT id, type, amount_minor, transaction_at, origin, external_source, external_id
+        FROM transactions
+        WHERE ledger_id = :ledgerId
+          AND transaction_at >= :startInclusive
+          AND transaction_at < :endExclusive
+        """,
+    )
+    suspend fun listFuzzyCandidates(
+        ledgerId: String,
+        startInclusive: Long,
+        endExclusive: Long,
+    ): List<FuzzyTransactionRow>
+
+    @Query(
+        """
+        UPDATE transactions
+        SET external_source = :source, external_id = :externalId, updated_at = :updatedAt
+        WHERE id = :id AND ledger_id = :ledgerId AND external_id IS NULL
+        """,
+    )
+    suspend fun attachExternalId(
+        id: String,
+        ledgerId: String,
+        source: String,
+        externalId: String,
+        updatedAt: Long,
+    ): Int
 
     @Query(
         """
