@@ -9,18 +9,30 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.TrendingDown
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
+import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.EventRepeat
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -34,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
+import com.example.localledger.BuildConfig
 import com.example.localledger.core.storage.ThemeMode
 import com.example.localledger.domain.model.CategoryType
 import com.example.localledger.ui.AppSession
@@ -42,6 +55,7 @@ import com.example.localledger.ui.home.SectionTitle
 import com.example.localledger.ui.navigation.Routes
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     appSession: AppSession,
@@ -57,56 +71,51 @@ fun SettingsScreen(
             .padding(horizontal = 16.dp),
     ) {
         SectionTitle("账本与分类")
-        Card(modifier = Modifier.fillMaxWidth()) {
-            SettingsEntry("账本管理") { navController.navigate(Routes.LEDGERS) }
+        Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
+            SettingsEntry("账本管理", Icons.AutoMirrored.Filled.MenuBook) { navController.navigate(Routes.LEDGERS) }
             HorizontalDivider()
-            SettingsEntry("账户管理") { navController.navigate(Routes.ACCOUNTS) }
+            SettingsEntry("账户管理", Icons.Default.AccountBalanceWallet) { navController.navigate(Routes.ACCOUNTS) }
             HorizontalDivider()
-            SettingsEntry("支出分类") {
+            SettingsEntry("支出分类", Icons.AutoMirrored.Filled.TrendingDown) {
                 navController.navigate(Routes.categories(CategoryType.EXPENSE))
             }
             HorizontalDivider()
-            SettingsEntry("收入分类") {
+            SettingsEntry("收入分类", Icons.AutoMirrored.Filled.TrendingUp) {
                 navController.navigate(Routes.categories(CategoryType.INCOME))
             }
             HorizontalDivider()
-            SettingsEntry("预算") { navController.navigate(Routes.BUDGETS) }
+            SettingsEntry("预算", Icons.Default.Savings) { navController.navigate(Routes.BUDGETS) }
             HorizontalDivider()
-            SettingsEntry("周期记账") { navController.navigate(Routes.RECURRING) }
+            SettingsEntry("周期记账", Icons.Default.EventRepeat) { navController.navigate(Routes.RECURRING) }
         }
 
         ExchangeRateSection()
 
         SectionTitle("外观")
-        Card(modifier = Modifier.fillMaxWidth()) {
-            ThemeMode.entries.forEachIndexed { index, mode ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 48.dp)
-                        .clickable { scope.launch { appSession.setTheme(mode) } }
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    RadioButton(
+        Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
+            SingleChoiceSegmentedButtonRow(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+            ) {
+                ThemeMode.entries.forEachIndexed { index, mode ->
+                    SegmentedButton(
                         selected = session.themeMode == mode,
                         onClick = { scope.launch { appSession.setTheme(mode) } },
-                    )
-                    Text(
-                        when (mode) {
-                            ThemeMode.SYSTEM -> "跟随系统"
-                            ThemeMode.LIGHT -> "浅色"
-                            ThemeMode.DARK -> "深色"
-                        },
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
+                        shape = SegmentedButtonDefaults.itemShape(index, ThemeMode.entries.size),
+                    ) {
+                        Text(
+                            when (mode) {
+                                ThemeMode.SYSTEM -> "跟随系统"
+                                ThemeMode.LIGHT -> "浅色"
+                                ThemeMode.DARK -> "深色"
+                            },
+                        )
+                    }
                 }
-                if (index < ThemeMode.entries.size - 1) HorizontalDivider()
             }
         }
 
         SectionTitle("数据与隐私")
-        Card(modifier = Modifier.fillMaxWidth()) {
+        Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
                     "数据仅保存在本机",
@@ -119,6 +128,30 @@ fun SettingsScreen(
                         "中间价未公布的币种再向其他公开接口补齐。没有网络时继续使用上次缓存的汇率。\n" +
                         "卸载应用、清除应用数据或恢复出厂设置后，账本数据将被删除且无法恢复。\n" +
                         "当前版本不支持备份与恢复。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        SectionTitle("关于")
+        Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Default.Info,
+                    contentDescription = null,
+                    modifier = Modifier.size(22.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(Modifier.size(12.dp))
+                Text("关于", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                Text(
+                    "版本 ${BuildConfig.VERSION_NAME}",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -227,7 +260,7 @@ internal fun RevalueConfirmDialog(
 }
 
 @Composable
-private fun SettingsEntry(label: String, onClick: () -> Unit) {
+private fun SettingsEntry(label: String, icon: ImageVector, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -236,6 +269,13 @@ private fun SettingsEntry(label: String, onClick: () -> Unit) {
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            modifier = Modifier.size(22.dp),
+            tint = MaterialTheme.colorScheme.primary,
+        )
+        Spacer(Modifier.size(12.dp))
         Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Icon(
             Icons.AutoMirrored.Filled.KeyboardArrowRight,

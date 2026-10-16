@@ -7,6 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.localledger.ui.AppSession
 import com.example.localledger.ui.navigation.AppNavHost
@@ -24,7 +25,13 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var appSession: AppSession
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
+        splashScreen.setKeepOnScreenCondition {
+            val session = appSession.state.value
+            val failed = session.initialization is InitializationState.Error || session.ledgerError != null
+            !session.isReady && !failed
+        }
         enableEdgeToEdge()
         setContent {
             LocalLedgerApp(appSession)

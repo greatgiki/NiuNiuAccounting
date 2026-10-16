@@ -11,11 +11,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AssistChip
@@ -24,7 +26,6 @@ import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -53,6 +54,7 @@ import com.example.localledger.domain.model.CategoryType
 import com.example.localledger.domain.model.TransactionType
 import com.example.localledger.ui.AppSession
 import com.example.localledger.ui.common.DateTimeFormatters
+import com.example.localledger.ui.common.MoneyFormatter
 import com.example.localledger.ui.component.ConfirmDeleteDialog
 import com.example.localledger.ui.component.EmptyState
 import com.example.localledger.ui.component.ErrorState
@@ -122,23 +124,31 @@ fun TransactionListScreen(
                     .padding(vertical = 4.dp),
             ) {
                 filter.type?.let {
-                    FilterChipLabel(typeLabel(it))
+                    RemovableFilterChip(typeLabel(it)) {
+                        viewModel.updateFilter { current -> current.copy(type = null) }
+                    }
                     Spacer(Modifier.padding(2.dp))
                 }
                 filter.categoryId?.let { id ->
                     state.categories.firstOrNull { it.id == id }?.let {
-                        FilterChipLabel(it.name)
+                        RemovableFilterChip(it.name) {
+                            viewModel.updateFilter { current -> current.copy(categoryId = null) }
+                        }
                         Spacer(Modifier.padding(2.dp))
                     }
                 }
                 filter.accountId?.let { id ->
                     state.accounts.firstOrNull { it.id == id }?.let {
-                        FilterChipLabel(it.name)
+                        RemovableFilterChip(it.name) {
+                            viewModel.updateFilter { current -> current.copy(accountId = null) }
+                        }
                         Spacer(Modifier.padding(2.dp))
                     }
                 }
                 if (filter.startDate != null || filter.endDate != null) {
-                    FilterChipLabel(dateFilterLabel(filter.startDate, filter.endDate))
+                    RemovableFilterChip(dateFilterLabel(filter.startDate, filter.endDate)) {
+                        viewModel.updateFilter { current -> current.copy(startDate = null, endDate = null) }
+                    }
                     Spacer(Modifier.padding(2.dp))
                 }
                 TextButton(onClick = viewModel::clearFilter) { Text("清空筛选") }
@@ -158,15 +168,26 @@ fun TransactionListScreen(
             else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
                 state.groups.forEach { group ->
                     stickyHeader(key = "header-${group.date}", contentType = "day-header") {
-                        Text(
-                            DateTimeFormatters.groupHeader(group.date),
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        val currency = session.currentLedgerCurrency
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .background(MaterialTheme.colorScheme.background)
                                 .padding(vertical = 8.dp),
-                        )
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                DateTimeFormatters.groupHeader(group.date),
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                "支出 ${MoneyFormatter.format(dayTotal(group, TransactionType.EXPENSE), currency)} / 收入 ${MoneyFormatter.format(dayTotal(group, TransactionType.INCOME), currency)}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                     items(
                         group.items,
@@ -175,6 +196,7 @@ fun TransactionListScreen(
                     ) { detail ->
                         SwipeToDeleteRow(
                             onDeleteRequest = { deleteTarget = detail.transaction.id },
+                            modifier = Modifier.animateItem(),
                         ) {
                             TransactionRowContent(
                                 title = transactionTitle(detail),
@@ -195,7 +217,6 @@ fun TransactionListScreen(
                                 ),
                             )
                         }
-                        HorizontalDivider()
                     }
                 }
                 if (state.canLoadMore) {
@@ -253,9 +274,28 @@ fun TransactionListScreen(
 }
 
 @Composable
-private fun FilterChipLabel(text: String) {
-    AssistChip(onClick = {}, label = { Text(text, style = MaterialTheme.typography.bodySmall) })
+private fun RemovableFilterChip(text: String, onRemove: () -> Unit) {
+    AssistChip(
+        onClick = onRemove,
+        label = { Text(text, style = MaterialTheme.typography.bodySmall) },
+        trailingIcon = {
+            Icon(
+                Icons.Default.Close,
+                contentDescription = "移除$text",
+                modifier = Modifier.size(16.dp),
+            )
+        },
+    )
 }
+
+private fun dayTotal(group: TransactionDayGroup, type: TransactionType): Long =
+    group.items.fold(0L) { acc, detail ->
+        if (detail.transaction.type == type) {
+            Math.addExact(acc, detail.transaction.baseAmountMinor)
+        } else {
+            acc
+        }
+    }
 
 private fun dateFilterLabel(startDate: LocalDate?, endDate: LocalDate?): String = when {
     startDate != null && endDate != null ->

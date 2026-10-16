@@ -1,5 +1,6 @@
 package com.example.localledger.ui.category
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -111,8 +112,10 @@ fun CategoryManageScreen(
         },
     ) { padding ->
         when {
-            state.isLoading -> LoadingState()
-            state.error != null -> ErrorState(state.error ?: "读取分类失败", onRetry = viewModel::retry)
+            state.isLoading -> Box(Modifier.fillMaxSize().padding(padding)) { LoadingState() }
+            state.error != null -> Box(Modifier.fillMaxSize().padding(padding)) {
+                ErrorState(state.error ?: "读取分类失败", onRetry = viewModel::retry)
+            }
             else -> LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
             ) {
@@ -121,6 +124,7 @@ fun CategoryManageScreen(
                 }
                 items(active, key = { it.id }, contentType = { "category" }) { category ->
                     CategoryRow(
+                        modifier = Modifier.animateItem(),
                         category = category,
                         onEdit = {
                             saveGate.reset()
@@ -234,10 +238,11 @@ private fun CategoryRow(
     category: Category,
     onEdit: () -> Unit,
     onArchive: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     Row(
-        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(vertical = 10.dp),
+        modifier = modifier.fillMaxWidth().heightIn(min = 48.dp).padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
