@@ -1,6 +1,7 @@
 package com.example.localledger.ui.home
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -33,14 +34,18 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import com.example.localledger.domain.model.TransactionType
+import com.example.localledger.domain.money.RatioMath
 import com.example.localledger.ui.AppSession
 import com.example.localledger.ui.common.DateTimeFormatters
+import com.example.localledger.ui.common.MoneyFormatter
 import com.example.localledger.ui.component.EmptyState
 import com.example.localledger.ui.component.ErrorState
 import com.example.localledger.ui.component.LoadingState
@@ -119,7 +124,25 @@ fun HomeScreen(
                         incomeMinor = state.incomeMinor,
                         expenseMinor = state.expenseMinor,
                         modifier = Modifier.padding(16.dp),
+                        currencyCode = state.currencyCode,
                     )
+                }
+            }
+            item(key = "budget-title") {
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    SectionTitle("本月预算", modifier = Modifier.weight(1f))
+                    TextButton(onClick = { navController.navigate(Routes.BUDGETS) }) {
+                        Text(if (state.budgets.isEmpty()) "设置" else "管理")
+                    }
+                }
+            }
+            if (state.budgets.isEmpty()) {
+                item(key = "budget-empty") {
+                    EmptyState("还没有预算，可以为这个月设置总预算或分类预算")
+                }
+            } else {
+                items(state.budgets, key = { "budget-${it.id}" }) { line ->
+                    BudgetProgressRow(line, state.currencyCode)
                 }
             }
             item(key = "balances-title") {
@@ -155,7 +178,10 @@ fun HomeScreen(
                             modifier = Modifier.weight(1f),
                             maxLines = 1,
                         )
-                        MoneyText(amountMinor = balance.balanceMinor)
+                        MoneyText(
+                            amountMinor = balance.balanceMinor,
+                            currencyCode = balance.account.currencyCode,
+                        )
                     }
                     HorizontalDivider()
                 }
@@ -187,9 +213,10 @@ fun HomeScreen(
                     val type = detail.transaction.type
                     TransactionRowContent(
                         title = transactionTitle(detail),
-                        subtitle = transactionSubtitle(detail),
+                        subtitle = transactionSubtitle(detail, state.currencyCode),
                         amountMinor = detail.transaction.amountMinor,
                         type = type,
+                        currencyCode = detail.accountCurrencyCode,
                         timeMillis = detail.transaction.transactionAt,
                         zoneId = viewModel.zoneId,
                         iconKey = detail.categoryIconKey,
@@ -270,8 +297,49 @@ fun transactionTitle(detail: com.example.localledger.domain.model.TransactionDet
         else -> detail.categoryName ?: "未分类"
     }
 
-fun transactionSubtitle(detail: com.example.localledger.domain.model.TransactionDetail): String =
-    buildList {
-        if (detail.transaction.type != TransactionType.TRANSFER) add(detail.accountName)
-        detail.transaction.note?.takeIf { it.isNotBlank() }?.let { add(it) }
-    }.joinToString(" · ")
+fun transactionSubtitle(
+    detail: com.example.localledger.domain.model.TransactionDetail,
+    ledgerCurrency: String = "CNY",
+): String = buildList {
+    if (detail.transaction.type != TransactionType.TRANSFER) add(detail.accountName)
+    val toCurrency = detail.toAccountCurrencyCode
+    val toAmount = detail.transaction.toAmountMinor
+    if (detail.transaction.type == TransactionType.TRANSFER && toAmount != null &&
+        toCurrency != null && toCurrency != detail.accountCurrencyCode
+    ) {
+        add("转入 ${MoneyFormatter.format(toAmount, toCurrency)}")
+    }
+    if (detail.accountCurrencyCode != ledgerCurrency) {
+        add("折合 ${MoneyFormatter.format(detail.transaction.baseAmountMinor, ledgerCurrency)}")
+    }
+    detail.transaction.note?.takeIf { it.isNotBlank() }?.let { add(it) }
+}.joinToString(" · ")
+
+@Composable
+fun BudgetProgressRow(line: HomeBudgetLine, currencyCode: String) {
+    val fraction = RatioMath.fraction(line.spentMinor.coerceAtLeast(0), line.limitMinor).coerceIn(0f, 1f)
+    val barColor = if (line.overspent) Color(0xFFC4392F) else Color(0xFF2F6F4E)
+    Column(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(line.label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 1)
+            Text(
+                line.percentLabel,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Text(
+            if (line.overspent) {
+                "超支 ${MoneyFormatter.format(-line.remainingMinor, currencyCode)}"
+            } else {
+                "剩余 ${MoneyFormatter.format(line.remainingMinor, currencyCode)} / ${MoneyFormatter.format(line.limitMinor, currencyCode)}"
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = if (line.overspent) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Canvas(modifier = Modifier.fillMaxWidth().padding(top = 4.dp).height(6.dp)) {
+            drawRect(color = Color(0x22000000), size = size)
+            drawRect(color = barColor, size = Size(size.width * fraction, size.height))
+        }
+    }
+}

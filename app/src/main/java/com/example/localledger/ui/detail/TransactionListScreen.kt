@@ -67,6 +67,7 @@ fun TransactionListScreen(
     viewModel: TransactionListViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val session by appSession.state.collectAsStateWithLifecycle()
     var showFilterSheet by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<String?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
@@ -154,8 +155,9 @@ fun TransactionListScreen(
                     items(group.items, key = { it.transaction.id }) { detail ->
                         TransactionRowContent(
                             title = transactionTitle(detail),
-                            subtitle = transactionSubtitle(detail),
+                            subtitle = transactionSubtitle(detail, session.currentLedgerCurrency),
                             amountMinor = detail.transaction.amountMinor,
+                            currencyCode = detail.accountCurrencyCode,
                             type = detail.transaction.type,
                             timeMillis = detail.transaction.transactionAt,
                             zoneId = ZoneId.systemDefault(),

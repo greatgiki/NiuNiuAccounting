@@ -35,7 +35,7 @@ interface AccountDao {
                     WHEN t.type = 'INCOME' AND t.account_id = a.id THEN t.amount_minor
                     WHEN t.type = 'EXPENSE' AND t.account_id = a.id THEN -t.amount_minor
                     WHEN t.type = 'TRANSFER' AND t.account_id = a.id THEN -t.amount_minor
-                    WHEN t.type = 'TRANSFER' AND t.to_account_id = a.id THEN t.amount_minor
+                    WHEN t.type = 'TRANSFER' AND t.to_account_id = a.id THEN COALESCE(t.to_amount_minor, t.amount_minor)
                     ELSE 0
                 END
             ), 0) AS balance_minor

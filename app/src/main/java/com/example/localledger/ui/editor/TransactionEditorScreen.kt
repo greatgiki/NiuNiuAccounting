@@ -178,8 +178,10 @@ private fun EditorContent(
             }
         }
 
+        val sourceCurrency = state.allAccounts.firstOrNull { it.id == input.accountId }?.currencyCode ?: "CNY"
+        val sourceSymbol = com.example.localledger.domain.money.CurrencyCatalog.symbol(sourceCurrency)
         Text(
-            text = if (input.amountText.isEmpty()) "¥0.00" else "¥${input.amountText}",
+            text = if (input.amountText.isEmpty()) "${sourceSymbol}0" else "$sourceSymbol${input.amountText}",
             style = MaterialTheme.typography.displaySmall.copy(fontFeatureSettings = "tnum"),
             color = if (input.amountError != null) {
                 MaterialTheme.colorScheme.error
@@ -250,6 +252,17 @@ private fun EditorContent(
                 selectedId = input.accountId,
                 onSelect = viewModel::onAccountSelect,
                 modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        val destinationCurrency = state.allAccounts.firstOrNull { it.id == input.toAccountId }?.currencyCode
+        if (input.type == TransactionType.TRANSFER && destinationCurrency != null && destinationCurrency != sourceCurrency) {
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = input.toAmountText,
+                onValueChange = viewModel::onToAmountChange,
+                label = { Text("转入金额（${com.example.localledger.domain.money.CurrencyCatalog.symbol(destinationCurrency)}，留空按最近汇率）") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
             )
         }
         if (input.accountError != null) {

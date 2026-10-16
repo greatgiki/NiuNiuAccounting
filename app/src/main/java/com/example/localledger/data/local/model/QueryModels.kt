@@ -17,6 +17,21 @@ data class TransactionDetailRow(
     @ColumnInfo(name = "to_account_name") val toAccountName: String?,
     @ColumnInfo(name = "category_name") val categoryName: String?,
     @ColumnInfo(name = "category_icon_key") val categoryIconKey: String?,
+    @ColumnInfo(name = "account_currency_code") val accountCurrencyCode: String,
+    @ColumnInfo(name = "to_account_currency_code") val toAccountCurrencyCode: String?,
+)
+
+data class BudgetRow(
+    @Embedded val budget: com.example.localledger.data.local.entity.BudgetEntity,
+    @ColumnInfo(name = "category_name") val categoryName: String?,
+)
+
+data class RecurringRuleRow(
+    @Embedded val rule: com.example.localledger.data.local.entity.RecurringRuleEntity,
+    @ColumnInfo(name = "account_name") val accountName: String,
+    @ColumnInfo(name = "to_account_name") val toAccountName: String?,
+    @ColumnInfo(name = "category_name") val categoryName: String?,
+    @ColumnInfo(name = "account_currency_code") val accountCurrencyCode: String,
 )
 
 data class IncomeExpenseSummaryRow(
