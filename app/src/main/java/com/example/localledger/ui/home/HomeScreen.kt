@@ -1,17 +1,20 @@
 package com.example.localledger.ui.home
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -34,8 +37,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -54,6 +59,7 @@ import com.example.localledger.ui.component.SummaryAmountRow
 import com.example.localledger.ui.component.TransactionRowContent
 import com.example.localledger.ui.navigation.Routes
 import com.example.localledger.ui.navigation.navigateToTransactions
+import com.example.localledger.ui.theme.amountColor
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -119,7 +125,7 @@ fun HomeScreen(
                 }
             }
             item(key = "summary") {
-                Card(modifier = Modifier.fillMaxWidth()) {
+                Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                     SummaryAmountRow(
                         incomeMinor = state.incomeMinor,
                         expenseMinor = state.expenseMinor,
@@ -141,7 +147,7 @@ fun HomeScreen(
                     EmptyState("还没有预算，可以为这个月设置总预算或分类预算")
                 }
             } else {
-                items(state.budgets, key = { "budget-${it.id}" }) { line ->
+                items(state.budgets, key = { "budget-${it.id}" }, contentType = { "budget" }) { line ->
                     BudgetProgressRow(line, state.currencyCode)
                 }
             }
@@ -157,10 +163,15 @@ fun HomeScreen(
                     )
                 }
             } else {
-                items(state.accountBalances, key = { "balance-${it.account.id}" }) { balance ->
+                items(
+                    state.accountBalances,
+                    key = { "balance-${it.account.id}" },
+                    contentType = { "balance" },
+                ) { balance ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .heightIn(min = 48.dp)
                             .clickable { navController.navigate(Routes.ACCOUNTS) }
                             .padding(vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -209,6 +220,7 @@ fun HomeScreen(
                 items(
                     state.recentTransactions,
                     key = { "recent-${it.transaction.id}" },
+                    contentType = { "recent" },
                 ) { detail ->
                     val type = detail.transaction.type
                     TransactionRowContent(
@@ -229,7 +241,7 @@ fun HomeScreen(
                     HorizontalDivider()
                 }
             }
-            item(key = "bottom-space") { Spacer(Modifier.height(96.dp)) }
+            item(key = "bottom-space") { Spacer(Modifier.height(24.dp)) }
         }
     }
 
@@ -251,6 +263,7 @@ fun HomeScreen(
                                     showLedgerPicker = false
                                 }
                             }
+                            .heightIn(min = 48.dp)
                             .padding(horizontal = 24.dp, vertical = 14.dp),
                     ) {
                         Text(
@@ -318,27 +331,61 @@ fun transactionSubtitle(
 @Composable
 fun BudgetProgressRow(line: HomeBudgetLine, currencyCode: String) {
     val fraction = RatioMath.fraction(line.spentMinor.coerceAtLeast(0), line.limitMinor).coerceIn(0f, 1f)
-    val barColor = if (line.overspent) Color(0xFFC4392F) else Color(0xFF2F6F4E)
-    Column(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+    val barColor = amountColor(if (line.overspent) TransactionType.EXPENSE else TransactionType.INCOME)
+    val status = if (line.overspent) {
+        "超支 ${MoneyFormatter.format(-line.remainingMinor, currencyCode)}"
+    } else {
+        "剩余 ${MoneyFormatter.format(line.remainingMinor, currencyCode)} / ${MoneyFormatter.format(line.limitMinor, currencyCode)}"
+    }
+    val description = "${line.label}，$status，已用 ${line.percentLabel}"
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(
+                if (line.overspent) {
+                    MaterialTheme.colorScheme.errorContainer
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                },
+            )
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .semantics { contentDescription = description },
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(line.label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 1)
             Text(
-                line.percentLabel,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                line.label,
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                if (line.overspent) "已超支" else line.percentLabel,
+                style = MaterialTheme.typography.labelMedium,
+                color = if (line.overspent) {
+                    MaterialTheme.colorScheme.onErrorContainer
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
             )
         }
         Text(
-            if (line.overspent) {
-                "超支 ${MoneyFormatter.format(-line.remainingMinor, currencyCode)}"
+            status,
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (line.overspent) {
+                MaterialTheme.colorScheme.onErrorContainer
             } else {
-                "剩余 ${MoneyFormatter.format(line.remainingMinor, currencyCode)} / ${MoneyFormatter.format(line.limitMinor, currencyCode)}"
+                MaterialTheme.colorScheme.onSurfaceVariant
             },
-            style = MaterialTheme.typography.bodySmall,
-            color = if (line.overspent) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Canvas(modifier = Modifier.fillMaxWidth().padding(top = 4.dp).height(6.dp)) {
-            drawRect(color = Color(0x22000000), size = size)
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 6.dp)
+                .height(8.dp)
+                .semantics { contentDescription = description },
+        ) {
+            drawRect(color = barColor.copy(alpha = 0.25f), size = size)
             drawRect(color = barColor, size = Size(size.width * fraction, size.height))
         }
     }

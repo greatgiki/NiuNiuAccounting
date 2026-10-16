@@ -2,10 +2,11 @@ package com.example.localledger.ui.ledger
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.localledger.domain.error.LedgerException
 import com.example.localledger.domain.model.Ledger
 import com.example.localledger.domain.repository.LedgerRepository
 import com.example.localledger.ui.AppSession
+import com.example.localledger.ui.common.UiOutcome
+import com.example.localledger.ui.common.runOutcome
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.StateFlow
@@ -27,26 +28,15 @@ class LedgerManageViewModel @Inject constructor(
     private val effectChannel = Channel<LedgerEffect>(Channel.BUFFERED)
     val effects = effectChannel.receiveAsFlow()
 
-    fun create(name: String, currencyCode: String) {
-        viewModelScope.launch {
-            try {
-                val id = ledgerRepository.createLedger(name, currencyCode)
-                appSession.switchLedger(id)
-            } catch (error: LedgerException) {
-                effectChannel.send(LedgerEffect.ShowMessage(error.message ?: "创建账本失败"))
-            }
-        }
+    suspend fun create(name: String, currencyCode: String): UiOutcome = runOutcome("创建账本失败") {
+        val id = ledgerRepository.createLedger(name, currencyCode)
+        appSession.switchLedger(id)
     }
 
-    fun rename(ledger: Ledger, name: String, currencyCode: String) {
-        viewModelScope.launch {
-            try {
-                ledgerRepository.updateLedger(ledger.copy(name = name, currencyCode = currencyCode))
-            } catch (error: LedgerException) {
-                effectChannel.send(LedgerEffect.ShowMessage(error.message ?: "修改账本失败"))
-            }
+    suspend fun rename(ledger: Ledger, name: String, currencyCode: String): UiOutcome =
+        runOutcome("修改账本失败") {
+            ledgerRepository.updateLedger(ledger.copy(name = name, currencyCode = currencyCode))
         }
-    }
 
     fun switchTo(ledgerId: String) {
         viewModelScope.launch {
@@ -54,25 +44,18 @@ class LedgerManageViewModel @Inject constructor(
         }
     }
 
-    fun archive(ledger: Ledger) {
+    suspend fun archive(ledger: Ledger): UiOutcome {
         val state = session.value
         val active = state.ledgers.filter { !it.isArchived }
         if (active.size <= 1) {
-            viewModelScope.launch {
-                effectChannel.send(LedgerEffect.ShowMessage("至少保留一个使用中的账本"))
-            }
-            return
+            return UiOutcome.Failure("至少保留一个使用中的账本")
         }
-        viewModelScope.launch {
-            try {
-                if (state.currentLedgerId == ledger.id) {
-                    val fallback = active.first { it.id != ledger.id }
-                    appSession.switchLedger(fallback.id)
-                }
-                ledgerRepository.archiveLedger(ledger.id)
-            } catch (error: LedgerException) {
-                effectChannel.send(LedgerEffect.ShowMessage(error.message ?: "归档账本失败"))
+        return runOutcome("归档账本失败") {
+            if (state.currentLedgerId == ledger.id) {
+                val fallback = active.first { it.id != ledger.id }
+                appSession.switchLedger(fallback.id)
             }
+            ledgerRepository.archiveLedger(ledger.id)
         }
     }
 }

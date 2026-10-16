@@ -20,6 +20,8 @@ import com.example.localledger.domain.usecase.SaveIncomeExpenseUseCase
 import com.example.localledger.domain.usecase.SaveTransferUseCase
 import com.example.localledger.ui.AppSession
 import com.example.localledger.ui.common.MoneyFormatter
+import com.example.localledger.ui.common.UiOutcome
+import com.example.localledger.ui.common.runOutcome
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
@@ -394,16 +396,13 @@ class TransactionEditorViewModel @Inject constructor(
         }
     }
 
-    fun delete() {
-        val id = transactionId ?: return
-        val ledgerId = appSession.state.value.currentLedgerId ?: return
-        viewModelScope.launch {
-            try {
-                deleteTransactionUseCase(ledgerId, id)
-                effectChannel.send(EditorEffect.NavigateBack)
-            } catch (error: LedgerException) {
-                effectChannel.send(EditorEffect.ShowMessage(error.message ?: "删除失败"))
-            }
+    suspend fun delete(): UiOutcome {
+        val id = transactionId ?: return UiOutcome.Failure("记录不存在")
+        val ledgerId = appSession.state.value.currentLedgerId
+            ?: return UiOutcome.Failure("请先选择账本")
+        return runOutcome("删除失败") {
+            deleteTransactionUseCase(ledgerId, id)
+            effectChannel.send(EditorEffect.NavigateBack)
         }
     }
 
