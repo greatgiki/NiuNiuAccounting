@@ -5,6 +5,7 @@ import androidx.room.Query
 import androidx.room.Upsert
 import com.example.localledger.data.local.entity.AccountEntity
 import com.example.localledger.data.local.model.AccountBalanceRow
+import com.example.localledger.data.local.model.AccountCurrencyRow
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -21,6 +22,9 @@ interface AccountDao {
     @Query("SELECT * FROM accounts WHERE id = :id")
     suspend fun findById(id: String): AccountEntity?
 
+    @Query("SELECT id, currency_code FROM accounts WHERE ledger_id = :ledgerId")
+    suspend fun currencies(ledgerId: String): List<AccountCurrencyRow>
+
     @Upsert
     suspend fun upsert(entity: AccountEntity)
 
@@ -35,7 +39,7 @@ interface AccountDao {
                     WHEN t.type = 'INCOME' AND t.account_id = a.id THEN t.amount_minor
                     WHEN t.type = 'EXPENSE' AND t.account_id = a.id THEN -t.amount_minor
                     WHEN t.type = 'TRANSFER' AND t.account_id = a.id THEN -t.amount_minor
-                    WHEN t.type = 'TRANSFER' AND t.to_account_id = a.id THEN t.amount_minor
+                    WHEN t.type = 'TRANSFER' AND t.to_account_id = a.id THEN COALESCE(t.to_amount_minor, t.amount_minor)
                     ELSE 0
                 END
             ), 0) AS balance_minor

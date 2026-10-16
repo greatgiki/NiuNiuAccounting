@@ -16,6 +16,14 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions WHERE id = :id")
     suspend fun findById(id: String): TransactionEntity?
 
+    @Query(
+        """
+        SELECT COUNT(*) FROM transactions
+        WHERE account_id = :accountId OR to_account_id = :accountId
+        """,
+    )
+    suspend fun countUsingAccount(accountId: String): Int
+
     @Upsert
     suspend fun upsert(entity: TransactionEntity)
 
@@ -25,13 +33,27 @@ interface TransactionDao {
     @Query("DELETE FROM transactions WHERE id = :id AND ledger_id = :ledgerId")
     suspend fun deleteById(id: String, ledgerId: String): Int
 
+    @Query("SELECT * FROM transactions WHERE ledger_id = :ledgerId ORDER BY transaction_at ASC, created_at ASC")
+    suspend fun listByLedger(ledgerId: String): List<TransactionEntity>
+
+    @Query(
+        """
+        UPDATE transactions
+        SET base_amount_minor = :baseAmountMinor, fx_rate = :fxRate, updated_at = :updatedAt
+        WHERE id = :id
+        """,
+    )
+    suspend fun updateValuation(id: String, baseAmountMinor: Long, fxRate: String, updatedAt: Long): Int
+
     @Query(
         """
         SELECT t.*,
             source.name AS account_name,
             destination.name AS to_account_name,
             c.name AS category_name,
-            c.icon_key AS category_icon_key
+            c.icon_key AS category_icon_key,
+            source.currency_code AS account_currency_code,
+            destination.currency_code AS to_account_currency_code
         FROM transactions t
         JOIN accounts source ON source.id = t.account_id
         LEFT JOIN accounts destination ON destination.id = t.to_account_id
@@ -47,7 +69,9 @@ interface TransactionDao {
             source.name AS account_name,
             destination.name AS to_account_name,
             c.name AS category_name,
-            c.icon_key AS category_icon_key
+            c.icon_key AS category_icon_key,
+            source.currency_code AS account_currency_code,
+            destination.currency_code AS to_account_currency_code
         FROM transactions t
         JOIN accounts source ON source.id = t.account_id
         LEFT JOIN accounts destination ON destination.id = t.to_account_id
@@ -77,8 +101,8 @@ interface TransactionDao {
     @Query(
         """
         SELECT
-            COALESCE(SUM(CASE WHEN type = 'INCOME' THEN amount_minor ELSE 0 END), 0) AS income_minor,
-            COALESCE(SUM(CASE WHEN type = 'EXPENSE' THEN amount_minor ELSE 0 END), 0) AS expense_minor
+            COALESCE(SUM(CASE WHEN type = 'INCOME' THEN base_amount_minor ELSE 0 END), 0) AS income_minor,
+            COALESCE(SUM(CASE WHEN type = 'EXPENSE' THEN base_amount_minor ELSE 0 END), 0) AS expense_minor
         FROM transactions
         WHERE ledger_id = :ledgerId
           AND transaction_at >= :startInclusive
@@ -97,7 +121,7 @@ interface TransactionDao {
             c.id AS category_id,
             c.name AS category_name,
             c.icon_key AS icon_key,
-            SUM(t.amount_minor) AS amount_minor
+            SUM(t.base_amount_minor) AS amount_minor
         FROM transactions t
         JOIN categories c ON c.id = t.category_id
         WHERE t.ledger_id = :ledgerId
@@ -116,7 +140,30 @@ interface TransactionDao {
 
     @Query(
         """
-        SELECT transaction_at, type, amount_minor
+        SELECT
+            c.id AS category_id,
+            c.name AS category_name,
+            c.icon_key AS icon_key,
+            SUM(t.base_amount_minor) AS amount_minor
+        FROM transactions t
+        JOIN categories c ON c.id = t.category_id
+        WHERE t.ledger_id = :ledgerId
+          AND t.type = 'INCOME'
+          AND t.transaction_at >= :startInclusive
+          AND t.transaction_at < :endExclusive
+        GROUP BY c.id, c.name, c.icon_key
+        ORDER BY amount_minor DESC
+        """,
+    )
+    fun observeIncomeCategories(
+        ledgerId: String,
+        startInclusive: Long,
+        endExclusive: Long,
+    ): Flow<List<CategoryTotalRow>>
+
+    @Query(
+        """
+        SELECT transaction_at, type, base_amount_minor AS amount_minor
         FROM transactions
         WHERE ledger_id = :ledgerId
           AND type IN ('INCOME', 'EXPENSE')

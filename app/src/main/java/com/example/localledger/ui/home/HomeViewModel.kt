@@ -2,11 +2,13 @@ package com.example.localledger.ui.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.localledger.domain.budget.BudgetMath
 import com.example.localledger.domain.model.AccountBalance
 import com.example.localledger.domain.model.StatisticsPeriod
 import com.example.localledger.domain.model.TransactionDetail
 import com.example.localledger.domain.model.TransactionFilter
 import com.example.localledger.domain.repository.AccountRepository
+import com.example.localledger.domain.repository.BudgetRepository
 import com.example.localledger.domain.repository.StatisticsRepository
 import com.example.localledger.domain.repository.TransactionRepository
 import com.example.localledger.domain.time.DateRangeResolver
@@ -25,14 +27,26 @@ import java.time.YearMonth
 import java.time.ZoneId
 import javax.inject.Inject
 
+data class HomeBudgetLine(
+    val id: String,
+    val label: String,
+    val limitMinor: Long,
+    val spentMinor: Long,
+    val remainingMinor: Long,
+    val percentLabel: String,
+    val overspent: Boolean,
+)
+
 data class HomeUiState(
     val isLoading: Boolean = true,
     val ledgerName: String = "",
+    val currencyCode: String = "CNY",
     val yearMonth: YearMonth,
     val incomeMinor: Long = 0,
     val expenseMinor: Long = 0,
     val accountBalances: List<AccountBalance> = emptyList(),
     val recentTransactions: List<TransactionDetail> = emptyList(),
+    val budgets: List<HomeBudgetLine> = emptyList(),
     val error: String? = null,
 ) {
     val balanceMinor: Long get() = incomeMinor - expenseMinor
@@ -45,6 +59,7 @@ class HomeViewModel @Inject constructor(
     statisticsRepository: StatisticsRepository,
     accountRepository: AccountRepository,
     transactionRepository: TransactionRepository,
+    budgetRepository: BudgetRepository,
     dateRangeResolver: DateRangeResolver,
 ) : ViewModel() {
     private val yearMonthFlow = MutableStateFlow(YearMonth.now())
@@ -56,25 +71,47 @@ class HomeViewModel @Inject constructor(
         yearMonthFlow,
         refreshFlow,
     ) { session, yearMonth, _ ->
-        Triple(session.currentLedgerId, session.currentLedgerName, yearMonth)
-    }.flatMapLatest { (ledgerId, ledgerName, yearMonth) ->
+        HomeQuery(session.currentLedgerId, session.currentLedgerName, session.currentLedgerCurrency, yearMonth)
+    }.flatMapLatest { query ->
+        val ledgerId = query.ledgerId
         if (ledgerId == null) {
-            flowOf(HomeUiState(isLoading = false, yearMonth = yearMonth))
+            flowOf(HomeUiState(isLoading = false, yearMonth = query.yearMonth, currencyCode = query.currencyCode))
         } else {
-            val range = dateRangeResolver.resolve(StatisticsPeriod.Month(yearMonth))
+            val range = dateRangeResolver.resolve(StatisticsPeriod.Month(query.yearMonth))
             combine(
                 statisticsRepository.observeSummary(ledgerId, range),
                 accountRepository.observeAccountBalances(ledgerId),
                 transactionRepository.observeTransactions(ledgerId, TransactionFilter(limit = 10)),
-            ) { summary, balances, recent ->
+                budgetRepository.observeMonth(ledgerId, query.yearMonth),
+                statisticsRepository.observeExpenseCategories(ledgerId, range),
+            ) { summary, balances, recent, budgets, categories ->
+                val spentByCategory = categories.associate { it.categoryId to it.amountMinor }
                 HomeUiState(
                     isLoading = false,
-                    ledgerName = ledgerName,
-                    yearMonth = yearMonth,
+                    ledgerName = query.ledgerName,
+                    currencyCode = query.currencyCode,
+                    yearMonth = query.yearMonth,
                     incomeMinor = summary.incomeMinor,
                     expenseMinor = summary.expenseMinor,
                     accountBalances = balances.filter { !it.account.isArchived },
                     recentTransactions = recent,
+                    budgets = budgets.map { budget ->
+                        val spent = if (budget.categoryId == null) {
+                            summary.expenseMinor
+                        } else {
+                            spentByCategory[budget.categoryId] ?: 0L
+                        }
+                        val figures = BudgetMath.figures(budget.amountMinor, spent)
+                        HomeBudgetLine(
+                            id = budget.id,
+                            label = budget.categoryName ?: "本月总预算",
+                            limitMinor = figures.limitMinor,
+                            spentMinor = figures.spentMinor,
+                            remainingMinor = figures.remainingMinor,
+                            percentLabel = figures.percentLabel,
+                            overspent = figures.overspent,
+                        )
+                    },
                 )
             }
         }
@@ -104,3 +141,10 @@ class HomeViewModel @Inject constructor(
         refreshFlow.value += 1
     }
 }
+
+private data class HomeQuery(
+    val ledgerId: String?,
+    val ledgerName: String,
+    val currencyCode: String,
+    val yearMonth: YearMonth,
+)

@@ -212,6 +212,9 @@ class WalletDatabaseTest {
                 note = note,
                 createdAt = at,
                 updatedAt = at,
+                toAmountMinor = if (type == TransactionType.TRANSFER) amount else null,
+                baseAmountMinor = amount,
+                fxRate = "1",
             ),
         )
     }

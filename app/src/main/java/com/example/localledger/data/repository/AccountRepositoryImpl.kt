@@ -7,6 +7,7 @@ import com.example.localledger.data.mapper.toEntity
 import com.example.localledger.domain.error.LedgerException
 import com.example.localledger.domain.model.Account
 import com.example.localledger.domain.model.AccountBalance
+import com.example.localledger.domain.money.CurrencyCatalog
 import com.example.localledger.domain.repository.AccountRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
@@ -44,10 +45,17 @@ class AccountRepositoryImpl @Inject constructor(
             if (existing != null && existing.ledgerId != account.ledgerId) {
                 throw LedgerException.AccountLedgerMismatch()
             }
+            val currencyCode = CurrencyCatalog.of(account.currencyCode).code
+            if (existing != null && existing.currencyCode != currencyCode &&
+                database.transactionDao().countUsingAccount(account.id) > 0
+            ) {
+                throw LedgerException.AccountCurrencyLocked()
+            }
             val now = clock.millis()
             database.accountDao().upsert(
                 account.copy(
                     name = normalizedName,
+                    currencyCode = currencyCode,
                     createdAt = existing?.createdAt ?: now,
                     updatedAt = now,
                 ).toEntity(),

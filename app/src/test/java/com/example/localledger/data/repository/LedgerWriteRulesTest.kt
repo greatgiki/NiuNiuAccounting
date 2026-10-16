@@ -8,8 +8,10 @@ import com.example.localledger.data.local.database.WalletDatabase
 import com.example.localledger.data.local.database.WalletDatabaseSource
 import com.example.localledger.domain.error.LedgerException
 import com.example.localledger.domain.model.CategoryType
+import com.example.localledger.domain.model.ExchangeRateSnapshot
 import com.example.localledger.domain.model.SaveTransactionCommand
 import com.example.localledger.domain.model.TransactionType
+import com.example.localledger.domain.repository.ExchangeRateRepository
 import com.example.localledger.domain.usecase.DeleteTransactionUseCase
 import com.example.localledger.domain.usecase.SaveIncomeExpenseUseCase
 import com.example.localledger.domain.usecase.SaveTransferUseCase
@@ -56,7 +58,7 @@ class LedgerWriteRulesTest {
         val ledgers = LedgerRepositoryImpl(source, clock)
         accounts = AccountRepositoryImpl(source, clock)
         categories = CategoryRepositoryImpl(source, clock)
-        transactions = TransactionRepositoryImpl(source, clock)
+        transactions = TransactionRepositoryImpl(source, UnusedExchangeRates, clock)
         saveIncomeExpense = SaveIncomeExpenseUseCase(transactions)
         saveTransfer = SaveTransferUseCase(transactions)
         deleteTransaction = DeleteTransactionUseCase(transactions)
@@ -176,4 +178,11 @@ class LedgerWriteRulesTest {
         categoryId = categoryId,
         transactionAt = 1_700_000_000_000L,
     )
+}
+
+private object UnusedExchangeRates : ExchangeRateRepository {
+    override fun observe(baseCode: String) = kotlinx.coroutines.flow.flowOf<ExchangeRateSnapshot?>(null)
+    override suspend fun get(baseCode: String): ExchangeRateSnapshot? = null
+    override suspend fun save(snapshot: ExchangeRateSnapshot) = Unit
+    override suspend fun baseCodesInUse(): List<String> = emptyList()
 }

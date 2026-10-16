@@ -2,13 +2,18 @@ package com.example.localledger.ui.statistics
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.localledger.domain.budget.BudgetMath
 import com.example.localledger.domain.model.AccountBalance
 import com.example.localledger.domain.model.CategoryTotal
 import com.example.localledger.domain.model.DailyTotal
+import com.example.localledger.domain.model.MonthlyTotal
 import com.example.localledger.domain.model.StatisticsPeriod
 import com.example.localledger.domain.repository.AccountRepository
+import com.example.localledger.domain.repository.BudgetRepository
 import com.example.localledger.domain.repository.StatisticsRepository
+import com.example.localledger.domain.statistics.TrendFill
 import com.example.localledger.domain.time.DateRangeResolver
+import com.example.localledger.ui.home.HomeBudgetLine
 import com.example.localledger.ui.AppSession
 import com.example.localledger.ui.common.DateTimeFormatters
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -37,11 +42,14 @@ data class StatisticsUiState(
     val isLoading: Boolean = true,
     val period: StatisticsPeriod,
     val periodText: String = "",
+    val currencyCode: String = "CNY",
     val incomeMinor: Long = 0,
     val expenseMinor: Long = 0,
     val categories: List<CategoryTotal> = emptyList(),
+    val incomeCategories: List<CategoryTotal> = emptyList(),
     val trend: List<TrendPoint> = emptyList(),
     val accountBalances: List<AccountBalance> = emptyList(),
+    val budgets: List<HomeBudgetLine> = emptyList(),
     val error: String? = null,
 )
 
@@ -53,6 +61,7 @@ class StatisticsViewModel @Inject constructor(
     appSession: AppSession,
     private val statisticsRepository: StatisticsRepository,
     accountRepository: AccountRepository,
+    budgetRepository: BudgetRepository,
     private val dateRangeResolver: DateRangeResolver,
 ) : ViewModel() {
     private val periodFlow = MutableStateFlow<StatisticsPeriod>(
@@ -64,10 +73,12 @@ class StatisticsViewModel @Inject constructor(
         appSession.state,
         periodFlow,
         refreshFlow,
-    ) { session, period, _ -> Pair(session.currentLedgerId, period) }
-        .flatMapLatest { (ledgerId, period) ->
+    ) { session, period, _ ->
+            Triple(session.currentLedgerId, session.currentLedgerCurrency, period)
+        }
+        .flatMapLatest { (ledgerId, currencyCode, period) ->
             if (ledgerId == null) {
-                flowOf(StatisticsUiState(isLoading = false, period = period))
+                flowOf(StatisticsUiState(isLoading = false, period = period, currencyCode = currencyCode))
             } else {
                 val range = dateRangeResolver.resolve(period)
                 val trendFlow = when (period) {
@@ -98,21 +109,54 @@ class StatisticsViewModel @Inject constructor(
                         }
                     }
                 }
+                val budgetFlow = if (period is StatisticsPeriod.Month) {
+                    budgetRepository.observeMonth(ledgerId, period.yearMonth)
+                } else {
+                    flowOf(emptyList())
+                }
                 combine(
-                    statisticsRepository.observeSummary(ledgerId, range),
-                    statisticsRepository.observeExpenseCategories(ledgerId, range),
+                    combine(
+                        statisticsRepository.observeSummary(ledgerId, range),
+                        statisticsRepository.observeExpenseCategories(ledgerId, range),
+                        statisticsRepository.observeIncomeCategories(ledgerId, range),
+                    ) { summary, categories, incomeCategories ->
+                        Triple(summary, categories, incomeCategories)
+                    },
                     trendFlow,
-                    accountRepository.observeAccountBalances(ledgerId),
-                ) { summary, categories, trend, balances ->
+                    combine(
+                        accountRepository.observeAccountBalances(ledgerId),
+                        budgetFlow,
+                    ) { balances, budgets -> balances to budgets },
+                ) { (summary, categories, incomeCategories), trend, (balances, budgets) ->
+                    val spentByCategory = categories.associate { it.categoryId to it.amountMinor }
                     StatisticsUiState(
                         isLoading = false,
                         period = period,
                         periodText = periodText(period),
+                        currencyCode = currencyCode,
                         incomeMinor = summary.incomeMinor,
                         expenseMinor = summary.expenseMinor,
                         categories = categories,
+                        incomeCategories = incomeCategories,
                         trend = trend,
                         accountBalances = balances.filter { !it.account.isArchived },
+                        budgets = budgets.map { budget ->
+                            val spent = if (budget.categoryId == null) {
+                                summary.expenseMinor
+                            } else {
+                                spentByCategory[budget.categoryId] ?: 0L
+                            }
+                            val figures = BudgetMath.figures(budget.amountMinor, spent)
+                            HomeBudgetLine(
+                                id = budget.id,
+                                label = budget.categoryName ?: "本月总预算",
+                                limitMinor = figures.limitMinor,
+                                spentMinor = figures.spentMinor,
+                                remainingMinor = figures.remainingMinor,
+                                percentLabel = figures.percentLabel,
+                                overspent = figures.overspent,
+                            )
+                        },
                     )
                 }
             }
@@ -196,17 +240,26 @@ class StatisticsViewModel @Inject constructor(
                             )
                         }.toList()
                 } else {
-                    days.groupBy { YearMonth.from(it.date) }
-                        .toSortedMap()
-                        .map { (yearMonth, monthDays) ->
-                            TrendPoint(
-                                label = DateTimeFormatters.monthShort(yearMonth),
-                                startDate = maxOf(yearMonth.atDay(1), period.startDate),
-                                endDate = minOf(yearMonth.atEndOfMonth(), period.endDate),
-                                incomeMinor = monthDays.sumOf { it.incomeMinor },
-                                expenseMinor = monthDays.sumOf { it.expenseMinor },
-                            )
-                        }
+                    val actual = days.groupBy { YearMonth.from(it.date) }.map { (yearMonth, monthDays) ->
+                        MonthlyTotal(
+                            yearMonth = yearMonth,
+                            incomeMinor = monthDays.fold(0L) { acc, day -> Math.addExact(acc, day.incomeMinor) },
+                            expenseMinor = monthDays.fold(0L) { acc, day -> Math.addExact(acc, day.expenseMinor) },
+                        )
+                    }
+                    TrendFill.fillMonths(
+                        YearMonth.from(period.startDate),
+                        YearMonth.from(period.endDate),
+                        actual,
+                    ).map { month ->
+                        TrendPoint(
+                            label = DateTimeFormatters.monthShort(month.yearMonth),
+                            startDate = maxOf(month.yearMonth.atDay(1), period.startDate),
+                            endDate = minOf(month.yearMonth.atEndOfMonth(), period.endDate),
+                            incomeMinor = month.incomeMinor,
+                            expenseMinor = month.expenseMinor,
+                        )
+                    }
                 }
             }
             else -> emptyList()
