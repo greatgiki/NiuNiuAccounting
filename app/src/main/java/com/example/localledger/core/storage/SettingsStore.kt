@@ -22,7 +22,17 @@ data class AppSettings(
     val lastAccountIdByLedger: Map<String, String> = emptyMap(),
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val hasAcknowledgedDataLoss: Boolean = false,
-)
+    val autoRecordEnabled: Boolean = false,
+    val autoConfirmDrafts: Boolean = false,
+    val wechatNotificationEnabled: Boolean = true,
+    val alipayNotificationEnabled: Boolean = true,
+    val importAccountIdBySource: Map<String, String> = emptyMap(),
+) {
+    fun importAccountKey(ledgerId: String, source: String) = "$ledgerId|$source"
+
+    fun importAccountId(ledgerId: String, source: String): String? =
+        importAccountIdBySource[importAccountKey(ledgerId, source)]
+}
 
 @Singleton
 class SettingsStore @Inject constructor(
@@ -32,6 +42,20 @@ class SettingsStore @Inject constructor(
     private val json = Json {
         ignoreUnknownKeys = true
         prettyPrint = true
+    }
+
+    suspend fun peek(): AppSettings? = mutex.withLock {
+        withContext(Dispatchers.IO) {
+            val file = storageManager.ensureDirectories().settingsFile
+            if (!file.exists()) return@withContext null
+            try {
+                AtomicFile(file).openRead().use { input ->
+                    json.decodeFromString<AppSettings>(input.bufferedReader().readText())
+                }
+            } catch (_: Exception) {
+                null
+            }
+        }
     }
 
     suspend fun readOrCreate(defaultLedgerId: String): AppSettings = mutex.withLock {

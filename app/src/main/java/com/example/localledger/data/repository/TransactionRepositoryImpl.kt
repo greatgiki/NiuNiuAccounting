@@ -5,6 +5,7 @@ import com.example.localledger.data.local.database.WalletDatabaseSource
 import com.example.localledger.data.local.entity.TransactionEntity
 import com.example.localledger.data.mapper.toDomain
 import com.example.localledger.domain.error.LedgerException
+import com.example.localledger.domain.importing.RecordOrigin
 import com.example.localledger.domain.model.CategoryType
 import com.example.localledger.domain.model.SaveTransactionCommand
 import com.example.localledger.domain.model.TransactionDetail
@@ -126,6 +127,9 @@ class TransactionRepositoryImpl @Inject constructor(
                     toAmountMinor = toAmount,
                     baseAmountMinor = baseAmount,
                     fxRate = fxRate,
+                    externalSource = command.externalSource ?: existing?.externalSource,
+                    externalId = command.externalId ?: existing?.externalId,
+                    origin = command.origin ?: existing?.origin ?: RecordOrigin.MANUAL,
                 ),
             )
             id

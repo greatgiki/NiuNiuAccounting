@@ -11,6 +11,7 @@ import com.example.localledger.data.local.dao.BudgetDao
 import com.example.localledger.data.local.dao.CategoryDao
 import com.example.localledger.data.local.dao.ExchangeRateDao
 import com.example.localledger.data.local.dao.LedgerDao
+import com.example.localledger.data.local.dao.PendingDraftDao
 import com.example.localledger.data.local.dao.RecurringRuleDao
 import com.example.localledger.data.local.dao.TransactionDao
 import com.example.localledger.data.local.entity.AccountEntity
@@ -19,6 +20,7 @@ import com.example.localledger.data.local.entity.CategoryEntity
 import com.example.localledger.data.local.entity.ExchangeRateHistoryEntity
 import com.example.localledger.data.local.entity.ExchangeRateSnapshotEntity
 import com.example.localledger.data.local.entity.LedgerEntity
+import com.example.localledger.data.local.entity.PendingDraftEntity
 import com.example.localledger.data.local.entity.RecurringOccurrenceEntity
 import com.example.localledger.data.local.entity.RecurringRuleEntity
 import com.example.localledger.data.local.entity.TransactionEntity
@@ -34,8 +36,9 @@ import com.example.localledger.data.local.entity.TransactionEntity
         RecurringOccurrenceEntity::class,
         ExchangeRateSnapshotEntity::class,
         ExchangeRateHistoryEntity::class,
+        PendingDraftEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 @TypeConverters(RoomConverters::class)
@@ -47,10 +50,11 @@ abstract class WalletDatabase : RoomDatabase() {
     abstract fun budgetDao(): BudgetDao
     abstract fun recurringRuleDao(): RecurringRuleDao
     abstract fun exchangeRateDao(): ExchangeRateDao
+    abstract fun pendingDraftDao(): PendingDraftDao
 
     companion object {
         const val FILE_NAME = "ledger.db"
-        val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
+        val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
 
         val INTEGRITY_CALLBACK = object : Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {
@@ -266,6 +270,55 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
             INSERT INTO `exchange_rate_history` (`base_code`, `fetched_at`, `rates_json`, `source`)
             SELECT `base_code`, `fetched_at`, `rates_json`, `source` FROM `exchange_rate_snapshots`
             """.trimIndent(),
+        )
+    }
+}
+
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `transactions` ADD COLUMN `external_source` TEXT")
+        db.execSQL("ALTER TABLE `transactions` ADD COLUMN `external_id` TEXT")
+        db.execSQL("ALTER TABLE `transactions` ADD COLUMN `origin` TEXT NOT NULL DEFAULT 'MANUAL'")
+        db.execSQL(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS `index_transactions_ledger_id_external_source_external_id`
+            ON `transactions` (`ledger_id`, `external_source`, `external_id`)
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `pending_drafts` (
+              `id` TEXT NOT NULL,
+              `ledger_id` TEXT NOT NULL,
+              `source` TEXT NOT NULL,
+              `type` TEXT NOT NULL,
+              `amount_minor` INTEGER NOT NULL,
+              `counterparty` TEXT,
+              `note` TEXT,
+              `raw_text` TEXT NOT NULL,
+              `category_id` TEXT,
+              `account_id` TEXT,
+              `transaction_at` INTEGER NOT NULL,
+              `status` TEXT NOT NULL,
+              `transaction_id` TEXT,
+              `notification_key` TEXT,
+              `likely_duplicate` INTEGER NOT NULL DEFAULT 0,
+              `created_at` INTEGER NOT NULL,
+              `updated_at` INTEGER NOT NULL,
+              PRIMARY KEY(`id`),
+              FOREIGN KEY(`ledger_id`) REFERENCES `ledgers`(`id`) ON UPDATE RESTRICT ON DELETE RESTRICT,
+              FOREIGN KEY(`account_id`) REFERENCES `accounts`(`id`) ON UPDATE RESTRICT ON DELETE RESTRICT,
+              FOREIGN KEY(`category_id`) REFERENCES `categories`(`id`) ON UPDATE RESTRICT ON DELETE RESTRICT
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_pending_drafts_ledger_id_status` ON `pending_drafts` (`ledger_id`, `status`)",
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_pending_drafts_account_id` ON `pending_drafts` (`account_id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_pending_drafts_category_id` ON `pending_drafts` (`category_id`)")
+        db.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_pending_drafts_notification_key` ON `pending_drafts` (`notification_key`)",
         )
     }
 }

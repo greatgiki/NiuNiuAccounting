@@ -22,6 +22,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,6 +36,10 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.localledger.domain.model.CategoryType
+import com.example.localledger.notification.PendingNavigation
+import com.example.localledger.ui.importing.AutoRecordScreen
+import com.example.localledger.ui.importing.BillImportScreen
+import com.example.localledger.ui.importing.DraftInboxScreen
 import com.example.localledger.domain.model.TransactionType
 import com.example.localledger.ui.AppSession
 import com.example.localledger.ui.account.AccountManageScreen
@@ -58,6 +63,9 @@ object Routes {
     const val ACCOUNTS = "accounts"
     const val BUDGETS = "budgets"
     const val RECURRING = "recurring"
+    const val IMPORT = "import"
+    const val AUTO_RECORD = "auto-record"
+    const val DRAFTS = "drafts"
     const val TRANSACTIONS_PATTERN =
         "transactions?type={type}&categoryId={categoryId}&accountId={accountId}" +
             "&startDate={startDate}&endDate={endDate}"
@@ -138,8 +146,16 @@ private fun RowScope.TopLevelNavItem(
 }
 
 @Composable
-fun AppNavHost(appSession: AppSession) {
+fun AppNavHost(appSession: AppSession, pendingNavigation: PendingNavigation) {
     val navController = rememberNavController()
+    LaunchedEffect(pendingNavigation) {
+        pendingNavigation.routes.collect { route ->
+            if (!route.isNullOrBlank()) {
+                navController.navigate(route) { launchSingleTop = true }
+                pendingNavigation.consume()
+            }
+        }
+    }
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val isTopLevel = topLevelDestinations.any { it.matchRoute == currentRoute }
@@ -252,6 +268,15 @@ fun AppNavHost(appSession: AppSession) {
             }
             composable(Routes.RECURRING) {
                 RecurringRuleScreen(navController = navController)
+            }
+            composable(Routes.IMPORT) {
+                BillImportScreen(navController = navController)
+            }
+            composable(Routes.AUTO_RECORD) {
+                AutoRecordScreen(appSession = appSession, navController = navController)
+            }
+            composable(Routes.DRAFTS) {
+                DraftInboxScreen(navController = navController)
             }
             composable(
                 route = Routes.CATEGORIES,

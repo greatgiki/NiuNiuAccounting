@@ -51,6 +51,21 @@ data class CategoryTotalRow(
     @ColumnInfo(name = "amount_minor") val amountMinor: Long,
 )
 
+data class ExternalKeyRow(
+    @ColumnInfo(name = "external_source") val externalSource: String,
+    @ColumnInfo(name = "external_id") val externalId: String,
+)
+
+data class FuzzyTransactionRow(
+    val id: String,
+    val type: TransactionType,
+    @ColumnInfo(name = "amount_minor") val amountMinor: Long,
+    @ColumnInfo(name = "transaction_at") val transactionAt: Long,
+    val origin: String,
+    @ColumnInfo(name = "external_source") val externalSource: String?,
+    @ColumnInfo(name = "external_id") val externalId: String?,
+)
+
 data class TrendSourceRow(
     @ColumnInfo(name = "transaction_at") val transactionAt: Long,
     val type: TransactionType,
