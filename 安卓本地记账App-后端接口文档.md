@@ -4,7 +4,7 @@
 
 本文档描述当前工程中已经实现、供前端和 ViewModel 调用的 Kotlin 后端接口。
 
-本项目是完全离线的 Android 应用，本文中的“接口”是 App 进程内的 Kotlin API，不是 HTTP、REST 或 RPC 接口。调用链如下：
+本文中的“接口”是 App 进程内的 Kotlin API，不是 HTTP、REST 或 RPC 接口。账本读写都在本机；唯一的出站请求是汇率刷新（中国外汇交易中心人民币中间价，以及补齐缺币种的备用源）。调用链如下：
 
 ```text
 Compose UI
@@ -1132,10 +1132,9 @@ repository.observeTransactions(ledgerId)
     settings.json
 ```
 
-App 不申请以下权限：
+App 申请 `INTERNET`，只用于刷新汇率。不申请以下权限：
 
 ```text
-INTERNET
 READ_EXTERNAL_STORAGE
 WRITE_EXTERNAL_STORAGE
 MANAGE_EXTERNAL_STORAGE
