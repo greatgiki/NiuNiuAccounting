@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -47,7 +48,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -69,6 +71,7 @@ import com.example.localledger.ui.component.TransactionRowContent
 import com.example.localledger.ui.navigation.Routes
 import com.example.localledger.ui.navigation.navigateToTransactions
 import com.example.localledger.ui.theme.LocalLedgerTheme
+import com.example.localledger.ui.theme.amountColor
 import kotlinx.coroutines.launch
 import java.time.YearMonth
 
@@ -196,6 +199,7 @@ fun HomeScreen(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
+                                        .heightIn(min = 48.dp)
                                         .clickable { navController.navigate(Routes.ACCOUNTS) }
                                         .padding(vertical = 10.dp),
                                     verticalAlignment = Alignment.CenterVertically,
@@ -279,7 +283,7 @@ fun HomeScreen(
                     }
                 }
             }
-            item(key = "bottom-space") { Spacer(Modifier.height(96.dp)) }
+            item(key = "bottom-space") { Spacer(Modifier.height(24.dp)) }
         }
     }
 
@@ -301,6 +305,7 @@ fun HomeScreen(
                                     showLedgerPicker = false
                                 }
                             }
+                            .heightIn(min = 48.dp)
                             .padding(horizontal = 24.dp, vertical = 14.dp),
                     ) {
                         Text(
@@ -471,27 +476,52 @@ fun BudgetProgressRow(
         animationSpec = tween(durationMillis = 700),
         label = "budget-progress",
     )
-    val barColor = if (line.overspent) Color(0xFFC4392F) else Color(0xFF2F6F4E)
+    val barColor = amountColor(if (line.overspent) TransactionType.EXPENSE else TransactionType.INCOME)
     val track = MaterialTheme.colorScheme.surfaceVariant
-    Column(modifier = modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+    val status = if (line.overspent) {
+        "超支 ${MoneyFormatter.format(-line.remainingMinor, currencyCode)}"
+    } else {
+        "剩余 ${MoneyFormatter.format(line.remainingMinor, currencyCode)} / ${MoneyFormatter.format(line.limitMinor, currencyCode)}"
+    }
+    val description = "${line.label}，$status，已用 ${line.percentLabel}"
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(bottom = 12.dp)
+            .semantics { contentDescription = description },
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(line.label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 1)
             Text(
-                line.percentLabel,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                line.label,
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                if (line.overspent) "已超支" else line.percentLabel,
+                style = MaterialTheme.typography.labelMedium,
+                color = if (line.overspent) {
+                    MaterialTheme.colorScheme.onErrorContainer
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
             )
         }
         Text(
-            if (line.overspent) {
-                "超支 ${MoneyFormatter.format(-line.remainingMinor, currencyCode)}"
+            status,
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (line.overspent) {
+                MaterialTheme.colorScheme.onErrorContainer
             } else {
-                "剩余 ${MoneyFormatter.format(line.remainingMinor, currencyCode)} / ${MoneyFormatter.format(line.limitMinor, currencyCode)}"
+                MaterialTheme.colorScheme.onSurfaceVariant
             },
-            style = MaterialTheme.typography.bodySmall,
-            color = if (line.overspent) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Canvas(modifier = Modifier.fillMaxWidth().padding(top = 6.dp).height(8.dp)) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 6.dp)
+                .height(8.dp)
+                .semantics { contentDescription = description },
+        ) {
             val radius = CornerRadius(size.height / 2f, size.height / 2f)
             drawRoundRect(color = track, cornerRadius = radius)
             drawRoundRect(

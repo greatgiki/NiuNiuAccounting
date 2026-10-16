@@ -21,6 +21,8 @@ import com.example.localledger.domain.usecase.ResumeRecurringRuleUseCase
 import com.example.localledger.domain.usecase.SaveRecurringRuleUseCase
 import com.example.localledger.domain.usecase.SetRecurringRulePausedUseCase
 import com.example.localledger.ui.AppSession
+import com.example.localledger.ui.common.UiOutcome
+import com.example.localledger.ui.common.runOutcome
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
@@ -97,32 +99,31 @@ class RecurringRuleViewModel @Inject constructor(
         emit(RecurringUiState(isLoading = false, error = error.message ?: "读取周期规则失败"))
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RecurringUiState())
 
-    fun save(draft: RecurringDraft) {
-        val ledgerId = appSession.state.value.currentLedgerId ?: return
+    suspend fun save(draft: RecurringDraft): UiOutcome {
+        val ledgerId = appSession.state.value.currentLedgerId
+            ?: return UiOutcome.Failure("请先选择账本")
         val account = uiState.value.accounts.firstOrNull { it.id == draft.accountId }
         val digits = CurrencyCatalog.of(account?.currencyCode ?: "CNY").minorDigits
         val amount = try {
             MoneyParser.toMinor(draft.amountText, digits)
         } catch (error: LedgerException) {
-            viewModelScope.launch { effectsChannel.send(RecurringEffect.ShowMessage(error.message ?: "金额不正确")) }
-            return
+            return UiOutcome.Failure(error.message ?: "金额不正确")
         }
         val toAmount = draft.toAmountText.trim().takeIf { it.isNotEmpty() }?.let { text ->
             val toAccount = uiState.value.accounts.firstOrNull { it.id == draft.toAccountId }
             val toDigits = CurrencyCatalog.of(toAccount?.currencyCode ?: "CNY").minorDigits
             try {
                 MoneyParser.toMinor(text, toDigits)
-            } catch (error: LedgerException) {
-                viewModelScope.launch { effectsChannel.send(RecurringEffect.ShowMessage("转入金额不正确")) }
-                return
+            } catch (_: LedgerException) {
+                return UiOutcome.Failure("转入金额不正确")
             }
         }
         val start = draft.startDate
         val end = draft.endDate
         if (end != null && end.isBefore(start)) {
-            viewModelScope.launch { effectsChannel.send(RecurringEffect.ShowMessage("结束日期不能早于开始日期")) }
-            return
+            return UiOutcome.Failure("结束日期不能早于开始日期")
         }
+        val accountId = draft.accountId ?: return UiOutcome.Failure("请选择账户")
         val existing = draft.existing
         val today = LocalDate.now(clock.withZone(zoneIdProvider.current()))
         val next = existing?.nextRunDate?.takeIf { !it.isBefore(start) } ?: start
@@ -132,7 +133,7 @@ class RecurringRuleViewModel @Inject constructor(
             type = draft.type,
             amountMinor = amount,
             toAmountMinor = if (draft.type == TransactionType.TRANSFER) toAmount else null,
-            accountId = draft.accountId ?: return,
+            accountId = accountId,
             toAccountId = if (draft.type == TransactionType.TRANSFER) draft.toAccountId else null,
             categoryId = if (draft.type == TransactionType.TRANSFER) null else draft.categoryId,
             note = draft.note.trim().ifEmpty { null },
@@ -144,13 +145,7 @@ class RecurringRuleViewModel @Inject constructor(
             createdAt = existing?.createdAt ?: clock.millis(),
             updatedAt = clock.millis(),
         )
-        viewModelScope.launch {
-            try {
-                saveRule(rule)
-            } catch (error: LedgerException) {
-                effectsChannel.send(RecurringEffect.ShowMessage(error.message ?: "保存规则失败"))
-            }
-        }
+        return runOutcome("保存规则失败") { saveRule(rule) }
     }
 
     fun pause(rule: RecurringRule) {
@@ -163,30 +158,22 @@ class RecurringRuleViewModel @Inject constructor(
         }
     }
 
-    fun resume(rule: RecurringRule, choice: ResumeChoice) {
-        viewModelScope.launch {
-            try {
-                val created = resumeRule(rule.ledgerId, rule.id, choice)
-                val message = when (choice) {
-                    ResumeChoice.BACKFILL -> if (created > 0) "已补记 $created 笔" else "没有需要补记的日期"
-                    ResumeChoice.SKIP_MISSED -> "已跳到下一次，不补记错过的日期"
-                }
-                effectsChannel.send(RecurringEffect.ShowMessage(message))
-            } catch (error: LedgerException) {
-                effectsChannel.send(RecurringEffect.ShowMessage(error.message ?: "更新失败"))
-            }
+    suspend fun resume(rule: RecurringRule, choice: ResumeChoice): UiOutcome = try {
+        val created = resumeRule(rule.ledgerId, rule.id, choice)
+        val message = when (choice) {
+            ResumeChoice.BACKFILL -> if (created > 0) "已补记 $created 笔" else "没有需要补记的日期"
+            ResumeChoice.SKIP_MISSED -> "已跳到下一次，不补记错过的日期"
         }
+        effectsChannel.send(RecurringEffect.ShowMessage(message))
+        UiOutcome.Success
+    } catch (error: kotlinx.coroutines.CancellationException) {
+        throw error
+    } catch (error: LedgerException) {
+        UiOutcome.Failure(error.message ?: "更新失败")
     }
 
-    fun delete(rule: RecurringRule, deleteGenerated: Boolean) {
-        viewModelScope.launch {
-            try {
-                deleteRule(rule.ledgerId, rule.id, deleteGenerated)
-            } catch (error: LedgerException) {
-                effectsChannel.send(RecurringEffect.ShowMessage(error.message ?: "删除失败"))
-            }
-        }
-    }
+    suspend fun delete(rule: RecurringRule, deleteGenerated: Boolean): UiOutcome =
+        runOutcome("删除失败") { deleteRule(rule.ledgerId, rule.id, deleteGenerated) }
 
     fun retry() {
         refreshFlow.value += 1

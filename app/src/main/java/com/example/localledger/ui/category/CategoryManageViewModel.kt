@@ -3,11 +3,12 @@ package com.example.localledger.ui.category
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.localledger.domain.error.LedgerException
 import com.example.localledger.domain.model.Category
 import com.example.localledger.domain.model.CategoryType
 import com.example.localledger.domain.repository.CategoryRepository
 import com.example.localledger.ui.AppSession
+import com.example.localledger.ui.common.UiOutcome
+import com.example.localledger.ui.common.runOutcome
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
@@ -78,13 +79,13 @@ class CategoryManageViewModel @Inject constructor(
             CategoryManageUiState(type = categoryType),
         )
 
-    fun save(
+    suspend fun save(
         existing: Category?,
         ledgerId: String,
         name: String,
         iconKey: String,
         sortOrderText: String,
-    ) {
+    ): UiOutcome {
         val now = System.currentTimeMillis()
         val category = Category(
             id = existing?.id ?: UUID.randomUUID().toString(),
@@ -97,24 +98,11 @@ class CategoryManageViewModel @Inject constructor(
             createdAt = existing?.createdAt ?: now,
             updatedAt = now,
         )
-        viewModelScope.launch {
-            try {
-                categoryRepository.saveCategory(category)
-            } catch (error: LedgerException) {
-                effectChannel.send(CategoryEffect.ShowMessage(error.message ?: "保存分类失败"))
-            }
-        }
+        return runOutcome("保存分类失败") { categoryRepository.saveCategory(category) }
     }
 
-    fun archive(categoryId: String) {
-        viewModelScope.launch {
-            try {
-                categoryRepository.archiveCategory(categoryId)
-            } catch (error: LedgerException) {
-                effectChannel.send(CategoryEffect.ShowMessage(error.message ?: "停用分类失败"))
-            }
-        }
-    }
+    suspend fun archive(categoryId: String): UiOutcome =
+        runOutcome("停用分类失败") { categoryRepository.archiveCategory(categoryId) }
 
     fun retry() { refreshFlow.value += 1 }
 }

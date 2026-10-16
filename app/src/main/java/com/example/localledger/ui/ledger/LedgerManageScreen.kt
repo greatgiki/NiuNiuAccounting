@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -34,6 +35,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,7 +47,9 @@ import com.example.localledger.domain.model.Ledger
 import com.example.localledger.domain.money.CurrencyCatalog
 import com.example.localledger.ui.AppSession
 import com.example.localledger.ui.common.CurrencyChips
+import com.example.localledger.ui.component.CollapsibleSectionHeader
 import com.example.localledger.ui.component.ConfirmDeleteDialog
+import com.example.localledger.ui.component.SubmitGate
 import com.example.localledger.ui.home.SectionTitle
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -60,6 +64,10 @@ fun LedgerManageScreen(
     var showCreateDialog by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<Ledger?>(null) }
     var archiveTarget by remember { mutableStateOf<Ledger?>(null) }
+    var archivedExpanded by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val saveGate = remember { SubmitGate() }
+    val archiveGate = remember { SubmitGate() }
 
     LaunchedEffect(Unit) {
         viewModel.effects.collect { effect ->
@@ -85,34 +93,51 @@ fun LedgerManageScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showCreateDialog = true }) {
+            FloatingActionButton(onClick = {
+                saveGate.reset()
+                showCreateDialog = true
+            }) {
                 Icon(Icons.Default.Add, contentDescription = "新建账本")
             }
         },
     ) { padding ->
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
-            item { SectionTitle("使用中") }
-            items(active, key = { it.id }) { ledger ->
+            item(key = "active-title") { SectionTitle("使用中") }
+            items(active, key = { it.id }, contentType = { "ledger" }) { ledger ->
                 LedgerRow(
                     ledger = ledger,
                     isCurrent = ledger.id == session.currentLedgerId,
                     onSwitch = { viewModel.switchTo(ledger.id) },
-                    onRename = { renameTarget = ledger },
+                    onRename = {
+                        saveGate.reset()
+                        renameTarget = ledger
+                    },
                     onArchive = { archiveTarget = ledger },
                 )
                 HorizontalDivider()
             }
             if (archived.isNotEmpty()) {
-                item { SectionTitle("已归档") }
-                items(archived, key = { it.id }) { ledger ->
-                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
-                        Text(
-                            ledger.name,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                item(key = "archived-header") {
+                    CollapsibleSectionHeader(
+                        title = "已归档（${archived.size}）",
+                        expanded = archivedExpanded,
+                        onToggle = { archivedExpanded = !archivedExpanded },
+                    )
+                }
+                if (archivedExpanded) {
+                    items(archived, key = { "archived-${it.id}" }, contentType = { "archived-ledger" }) { ledger ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                ledger.name,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        HorizontalDivider()
                     }
-                    HorizontalDivider()
                 }
             }
         }
@@ -122,11 +147,19 @@ fun LedgerManageScreen(
         NameInputDialog(
             title = "新建账本",
             confirmLabel = "创建",
+            submitting = saveGate.submitting,
+            errorMessage = saveGate.error,
             onConfirm = { name, currency ->
-                showCreateDialog = false
-                viewModel.create(name, currency)
+                saveGate.launch(scope, { viewModel.create(name, currency) }) {
+                    showCreateDialog = false
+                }
             },
-            onDismiss = { showCreateDialog = false },
+            onDismiss = {
+                if (!saveGate.submitting) {
+                    saveGate.reset()
+                    showCreateDialog = false
+                }
+            },
         )
     }
 
@@ -136,11 +169,19 @@ fun LedgerManageScreen(
             initialValue = ledger.name,
             initialCurrency = ledger.currencyCode,
             confirmLabel = "保存",
+            submitting = saveGate.submitting,
+            errorMessage = saveGate.error,
             onConfirm = { name, currency ->
-                renameTarget = null
-                viewModel.rename(ledger, name, currency)
+                saveGate.launch(scope, { viewModel.rename(ledger, name, currency) }) {
+                    renameTarget = null
+                }
             },
-            onDismiss = { renameTarget = null },
+            onDismiss = {
+                if (!saveGate.submitting) {
+                    saveGate.reset()
+                    renameTarget = null
+                }
+            },
         )
     }
 
@@ -148,11 +189,18 @@ fun LedgerManageScreen(
         ConfirmDeleteDialog(
             title = "归档账本“${ledger.name}”？",
             message = "归档后不能再记录新流水，历史数据仍会保留。",
+            confirmLabel = "归档",
+            submitting = archiveGate.submitting,
+            errorMessage = archiveGate.error,
             onConfirm = {
-                archiveTarget = null
-                viewModel.archive(ledger)
+                archiveGate.launch(scope, { viewModel.archive(ledger) }) {
+                    archiveTarget = null
+                }
             },
-            onDismiss = { archiveTarget = null },
+            onDismiss = {
+                archiveGate.reset()
+                archiveTarget = null
+            },
         )
     }
 }
@@ -169,6 +217,7 @@ private fun LedgerRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = 48.dp)
             .clickable(onClick = onSwitch)
             .padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -223,6 +272,8 @@ fun NameInputDialog(
     confirmLabel: String,
     onConfirm: (String, String) -> Unit,
     onDismiss: () -> Unit,
+    submitting: Boolean = false,
+    errorMessage: String? = null,
 ) {
     var value by remember { mutableStateOf(initialValue) }
     var currency by remember { mutableStateOf(initialCurrency) }
@@ -245,16 +296,24 @@ fun NameInputDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 8.dp),
                 )
+                if (!errorMessage.isNullOrBlank()) {
+                    Text(
+                        errorMessage,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
             }
         },
         confirmButton = {
             TextButton(
-                onClick = { onConfirm(value.trim(), currency) },
-                enabled = value.isNotBlank(),
-            ) { Text(confirmLabel) }
+                onClick = { if (!submitting) onConfirm(value.trim(), currency) },
+                enabled = value.isNotBlank() && !submitting,
+            ) { Text(if (submitting) "保存中…" else confirmLabel) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(onClick = onDismiss, enabled = !submitting) { Text("取消") }
         },
     )
 }
