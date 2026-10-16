@@ -136,7 +136,14 @@ private class FakeRules : RecurringRuleRepository {
     override fun observe(ledgerId: String): Flow<List<RecurringRule>> = flowOf(rules)
     override suspend fun save(rule: RecurringRule) = Unit
     override suspend fun setPaused(ledgerId: String, ruleId: String, paused: Boolean) = Unit
-    override suspend fun delete(ledgerId: String, ruleId: String) = Unit
+    override suspend fun delete(ledgerId: String, ruleId: String, deleteGenerated: Boolean) = Unit
+
+    override suspend fun resume(
+        ledgerId: String,
+        ruleId: String,
+        choice: com.example.localledger.domain.model.ResumeChoice,
+        today: java.time.LocalDate,
+    ) = Unit
     override suspend fun listActive(): List<RecurringRule> = rules.filter { !it.paused }
     override suspend fun hasOccurrence(ruleId: String, occurrenceDate: LocalDate) = (ruleId to occurrenceDate) in occurrences
     override suspend fun recordOccurrence(ruleId: String, occurrenceDate: LocalDate, transactionId: String) {

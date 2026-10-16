@@ -13,6 +13,7 @@ import com.example.localledger.domain.model.IncomeExpenseSummary
 import com.example.localledger.domain.model.Ledger
 import com.example.localledger.domain.model.MonthlyTotal
 import com.example.localledger.domain.model.RecurringRule
+import com.example.localledger.domain.model.ResumeChoice
 import com.example.localledger.domain.model.SaveTransactionCommand
 import com.example.localledger.domain.model.TransactionDetail
 import com.example.localledger.domain.model.TransactionFilter
@@ -23,6 +24,7 @@ interface LedgerRepository {
     fun observeLedgers(): Flow<List<Ledger>>
     suspend fun createLedger(name: String, currencyCode: String = "CNY"): String
     suspend fun updateLedger(ledger: Ledger)
+    suspend fun revalueWithCurrentRates(ledgerId: String): Int
     suspend fun archiveLedger(ledgerId: String)
 }
 
@@ -70,7 +72,8 @@ interface RecurringRuleRepository {
     fun observe(ledgerId: String): Flow<List<RecurringRule>>
     suspend fun save(rule: RecurringRule)
     suspend fun setPaused(ledgerId: String, ruleId: String, paused: Boolean)
-    suspend fun delete(ledgerId: String, ruleId: String)
+    suspend fun resume(ledgerId: String, ruleId: String, choice: ResumeChoice, today: java.time.LocalDate)
+    suspend fun delete(ledgerId: String, ruleId: String, deleteGenerated: Boolean)
     suspend fun listActive(): List<RecurringRule>
     suspend fun hasOccurrence(ruleId: String, occurrenceDate: java.time.LocalDate): Boolean
     suspend fun recordOccurrence(ruleId: String, occurrenceDate: java.time.LocalDate, transactionId: String)

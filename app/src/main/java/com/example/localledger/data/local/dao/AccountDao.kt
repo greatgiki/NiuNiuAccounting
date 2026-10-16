@@ -5,6 +5,7 @@ import androidx.room.Query
 import androidx.room.Upsert
 import com.example.localledger.data.local.entity.AccountEntity
 import com.example.localledger.data.local.model.AccountBalanceRow
+import com.example.localledger.data.local.model.AccountCurrencyRow
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -20,6 +21,9 @@ interface AccountDao {
 
     @Query("SELECT * FROM accounts WHERE id = :id")
     suspend fun findById(id: String): AccountEntity?
+
+    @Query("SELECT id, currency_code FROM accounts WHERE ledger_id = :ledgerId")
+    suspend fun currencies(ledgerId: String): List<AccountCurrencyRow>
 
     @Upsert
     suspend fun upsert(entity: AccountEntity)

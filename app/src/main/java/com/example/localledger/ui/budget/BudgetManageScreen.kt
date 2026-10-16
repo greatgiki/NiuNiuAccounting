@@ -158,10 +158,10 @@ fun BudgetManageScreen(
     }
 }
 
-private data class BudgetEditor(val existing: Budget?, val categoryId: String?)
+internal data class BudgetEditor(val existing: Budget?, val categoryId: String?)
 
 @Composable
-private fun BudgetEditDialog(
+internal fun BudgetEditDialog(
     target: BudgetEditor,
     categories: List<com.example.localledger.domain.model.Category>,
     currencyCode: String,

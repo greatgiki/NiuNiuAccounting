@@ -444,7 +444,7 @@ private fun ExpenseShareChart(
 }
 
 @Composable
-private fun ExpenseCategoryBars(
+internal fun ExpenseCategoryBars(
     categories: List<com.example.localledger.domain.model.CategoryTotal>,
     totalMinor: Long,
     currencyCode: String,

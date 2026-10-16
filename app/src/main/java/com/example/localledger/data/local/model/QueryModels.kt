@@ -6,6 +6,11 @@ import com.example.localledger.data.local.entity.AccountEntity
 import com.example.localledger.data.local.entity.TransactionEntity
 import com.example.localledger.domain.model.TransactionType
 
+data class AccountCurrencyRow(
+    val id: String,
+    @ColumnInfo(name = "currency_code") val currencyCode: String,
+)
+
 data class AccountBalanceRow(
     @Embedded val account: AccountEntity,
     @ColumnInfo(name = "balance_minor") val balanceMinor: Long,

@@ -143,6 +143,9 @@ data class MonthlyTotal(
 
 enum class RecurrencePeriod { DAILY, WEEKLY, MONTHLY, YEARLY }
 
+/** 恢复暂停的周期规则时，是否补记暂停期间错过的发生日。 */
+enum class ResumeChoice { BACKFILL, SKIP_MISSED }
+
 data class Budget(
     val id: String,
     val ledgerId: String,

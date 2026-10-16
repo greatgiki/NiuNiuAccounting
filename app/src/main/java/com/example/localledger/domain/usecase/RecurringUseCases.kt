@@ -2,6 +2,7 @@ package com.example.localledger.domain.usecase
 
 import com.example.localledger.domain.error.LedgerException
 import com.example.localledger.domain.model.RecurringRule
+import com.example.localledger.domain.model.ResumeChoice
 import com.example.localledger.domain.model.SaveTransactionCommand
 import com.example.localledger.domain.model.TransactionType
 import com.example.localledger.domain.recurrence.RecurrenceSchedule
@@ -23,7 +24,8 @@ class SaveRecurringRuleUseCase @Inject constructor(
 class DeleteRecurringRuleUseCase @Inject constructor(
     private val repository: RecurringRuleRepository,
 ) {
-    suspend operator fun invoke(ledgerId: String, ruleId: String) = repository.delete(ledgerId, ruleId)
+    suspend operator fun invoke(ledgerId: String, ruleId: String, deleteGenerated: Boolean) =
+        repository.delete(ledgerId, ruleId, deleteGenerated)
 }
 
 class SetRecurringRulePausedUseCase @Inject constructor(
@@ -31,6 +33,19 @@ class SetRecurringRulePausedUseCase @Inject constructor(
 ) {
     suspend operator fun invoke(ledgerId: String, ruleId: String, paused: Boolean) {
         repository.setPaused(ledgerId, ruleId, paused)
+    }
+}
+
+class ResumeRecurringRuleUseCase @Inject constructor(
+    private val repository: RecurringRuleRepository,
+    private val generate: GenerateRecurringTransactionsUseCase,
+    private val zoneIdProvider: ZoneIdProvider,
+    private val clock: Clock,
+) {
+    suspend operator fun invoke(ledgerId: String, ruleId: String, choice: ResumeChoice): Int {
+        val today = LocalDate.now(clock.withZone(zoneIdProvider.current()))
+        repository.resume(ledgerId, ruleId, choice, today)
+        return if (choice == ResumeChoice.BACKFILL) generate.catchUp(ruleId, today) else 0
     }
 }
 
@@ -42,6 +57,14 @@ class GenerateRecurringTransactionsUseCase @Inject constructor(
     private val zoneIdProvider: ZoneIdProvider,
     private val clock: Clock,
 ) {
+    suspend fun catchUp(
+        ruleId: String,
+        today: LocalDate = LocalDate.now(clock.withZone(zoneIdProvider.current())),
+    ): Int {
+        val rule = rules.listActive().firstOrNull { it.id == ruleId } ?: return 0
+        return generate(rule, today)
+    }
+
     suspend operator fun invoke(today: LocalDate = LocalDate.now(clock.withZone(zoneIdProvider.current()))): Int {
         var created = 0
         for (rule in rules.listActive()) {
