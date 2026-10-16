@@ -123,8 +123,98 @@ class WalletMigrationTest {
         migrated.close()
     }
 
+    @Test
+    fun migrate3To4AddsExternalIdentityAndDrafts() {
+        helper.createDatabase(IMPORT_DB, 3).apply {
+            execSQL(
+                """
+                INSERT INTO ledgers (id, name, currency_code, created_at, is_archived)
+                VALUES ('ledger', '日常', 'CNY', 1, 0)
+                """.trimIndent(),
+            )
+            execSQL(
+                """
+                INSERT INTO accounts (id, ledger_id, name, type, initial_balance_minor, sort_order, is_archived, created_at, updated_at, currency_code)
+                VALUES ('cash', 'ledger', '现金', 'CASH', 0, 0, 0, 1, 1, 'CNY')
+                """.trimIndent(),
+            )
+            execSQL(
+                """
+                INSERT INTO categories (id, ledger_id, name, type, icon_key, sort_order, is_archived, created_at, updated_at)
+                VALUES ('food', 'ledger', '餐饮', 'EXPENSE', 'restaurant', 0, 0, 1, 1)
+                """.trimIndent(),
+            )
+            execSQL(
+                """
+                INSERT INTO transactions (
+                  id, ledger_id, type, amount_minor, account_id, to_account_id, category_id,
+                  transaction_at, note, created_at, updated_at, to_amount_minor, base_amount_minor, fx_rate
+                ) VALUES (
+                  'expense', 'ledger', 'EXPENSE', 2500, 'cash', NULL, 'food',
+                  10, NULL, 10, 10, NULL, 2500, '1'
+                )
+                """.trimIndent(),
+            )
+            close()
+        }
+
+        val migrated = helper.runMigrationsAndValidate(IMPORT_DB, 4, true, *WalletDatabase.MIGRATIONS)
+        migrated.query("SELECT external_source, external_id, origin FROM transactions WHERE id = 'expense'").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertTrue(cursor.isNull(0))
+            assertTrue(cursor.isNull(1))
+            assertEquals("MANUAL", cursor.getString(2))
+        }
+        migrated.execSQL(
+            """
+            UPDATE transactions
+            SET external_source = 'WECHAT', external_id = '42001'
+            WHERE id = 'expense'
+            """.trimIndent(),
+        )
+        migrated.execSQL(
+            """
+            INSERT INTO pending_drafts (
+              id, ledger_id, source, type, amount_minor, counterparty, note, raw_text,
+              category_id, account_id, transaction_at, status, transaction_id, notification_key,
+              likely_duplicate, created_at, updated_at
+            ) VALUES (
+              'draft', 'ledger', 'WECHAT', 'EXPENSE', 1250, '美团', NULL, '微信支付 已支付¥12.50',
+              'food', 'cash', 20, 'PENDING', NULL, 'notify-1',
+              0, 20, 20
+            )
+            """.trimIndent(),
+        )
+        migrated.query("SELECT status, source FROM pending_drafts WHERE id = 'draft'").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("PENDING", cursor.getString(0))
+            assertEquals("WECHAT", cursor.getString(1))
+        }
+        var rejected = false
+        try {
+            migrated.execSQL(
+                """
+                INSERT INTO transactions (
+                  id, ledger_id, type, amount_minor, account_id, to_account_id, category_id,
+                  transaction_at, note, created_at, updated_at, to_amount_minor, base_amount_minor, fx_rate,
+                  external_source, external_id, origin
+                ) VALUES (
+                  'dup', 'ledger', 'EXPENSE', 100, 'cash', NULL, 'food',
+                  11, NULL, 11, 11, NULL, 100, '1',
+                  'WECHAT', '42001', 'IMPORT'
+                )
+                """.trimIndent(),
+            )
+        } catch (_: android.database.sqlite.SQLiteConstraintException) {
+            rejected = true
+        }
+        assertTrue(rejected)
+        migrated.close()
+    }
+
     private companion object {
         const val TEST_DB = "migration-test"
         const val HISTORY_DB = "migration-history"
+        const val IMPORT_DB = "migration-import"
     }
 }

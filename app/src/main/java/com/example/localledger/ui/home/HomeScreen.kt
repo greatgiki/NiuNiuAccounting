@@ -68,6 +68,7 @@ import com.example.localledger.ui.component.ErrorState
 import com.example.localledger.ui.component.LoadingState
 import com.example.localledger.ui.component.MoneyText
 import com.example.localledger.ui.component.TransactionRowContent
+import com.example.localledger.ui.importing.PendingDraftBanner
 import com.example.localledger.ui.navigation.Routes
 import com.example.localledger.ui.navigation.navigateToTransactions
 import com.example.localledger.ui.theme.LocalLedgerTheme
@@ -147,6 +148,9 @@ fun HomeScreen(
                         )
                     }
                 }
+            }
+            item(key = "drafts") {
+                PendingDraftBanner(navController)
             }
             item(key = "summary") {
                 MonthOverviewCard(
