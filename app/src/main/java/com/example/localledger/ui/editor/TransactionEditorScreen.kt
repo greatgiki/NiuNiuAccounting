@@ -1,6 +1,7 @@
 package com.example.localledger.ui.editor
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -33,6 +34,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -56,6 +58,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
@@ -76,7 +79,6 @@ import com.example.localledger.ui.common.DateTimeFormatters
 import com.example.localledger.ui.component.AmountField
 import com.example.localledger.ui.component.CategoryIconGrid
 import com.example.localledger.ui.component.ConfirmDeleteDialog
-import com.example.localledger.ui.component.LoadingState
 import com.example.localledger.ui.component.SubmitGate
 import com.example.localledger.ui.theme.LocalLedgerTheme
 import com.example.localledger.ui.theme.amountColor
@@ -126,19 +128,34 @@ fun TransactionEditorScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
-        when {
-            state.isLoading -> Box(modifier = Modifier.padding(padding)) { LoadingState() }
-            state.input.notFound -> Box(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("记录不存在或已删除")
+        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+            when {
+                state.input.notFound -> Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("记录不存在或已删除")
+                }
+                else -> EditorContent(
+                    state = state,
+                    viewModel = viewModel,
+                    modifier = Modifier.fillMaxSize(),
+                )
             }
-            else -> EditorContent(
-                state = state,
-                viewModel = viewModel,
-                modifier = Modifier.padding(padding),
-            )
+            if (state.isLoading && !state.input.notFound) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() },
+                            onClick = {},
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp))
+                }
+            }
         }
     }
 
@@ -173,7 +190,12 @@ private fun EditorContent(
     val input = state.input
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
+    var showCategoryIcons by remember { mutableStateOf(false) }
     val typeColor = amountColor(input.type)
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        showCategoryIcons = true
+    }
 
     Column(modifier = modifier.fillMaxSize()) {
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -238,11 +260,15 @@ private fun EditorContent(
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
-                CategoryIconGrid(
-                    categories = state.activeCategories,
-                    selectedId = input.categoryId,
-                    onSelect = viewModel::onCategorySelect,
-                )
+                when {
+                    !state.categoriesLoaded -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    !showCategoryIcons -> Spacer(Modifier.height(96.dp))
+                    else -> CategoryIconGrid(
+                        categories = state.activeCategories,
+                        selectedId = input.categoryId,
+                        onSelect = viewModel::onCategorySelect,
+                    )
+                }
                 Spacer(Modifier.height(12.dp))
             }
 

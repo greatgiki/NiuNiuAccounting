@@ -1,12 +1,20 @@
 package com.example.localledger.ui.navigation
 
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerDefaults
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
@@ -15,17 +23,24 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -34,25 +49,28 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.localledger.domain.model.CategoryType
-import com.example.localledger.notification.PendingNavigation
-import com.example.localledger.ui.importing.AutoRecordScreen
-import com.example.localledger.ui.importing.BillImportScreen
-import com.example.localledger.ui.importing.DraftInboxScreen
 import com.example.localledger.domain.model.TransactionType
+import com.example.localledger.notification.PendingNavigation
 import com.example.localledger.ui.AppSession
 import com.example.localledger.ui.account.AccountManageScreen
 import com.example.localledger.ui.budget.BudgetManageScreen
 import com.example.localledger.ui.category.CategoryManageScreen
-import com.example.localledger.ui.recurring.RecurringRuleScreen
 import com.example.localledger.ui.detail.TransactionListScreen
 import com.example.localledger.ui.editor.TransactionEditorScreen
 import com.example.localledger.ui.home.HomeScreen
+import com.example.localledger.ui.importing.AutoRecordScreen
+import com.example.localledger.ui.importing.BillImportScreen
+import com.example.localledger.ui.importing.DraftInboxScreen
 import com.example.localledger.ui.ledger.LedgerManageScreen
+import com.example.localledger.ui.recurring.RecurringRuleScreen
 import com.example.localledger.ui.settings.SettingsScreen
 import com.example.localledger.ui.statistics.StatisticsScreen
+import kotlinx.coroutines.launch
 import java.time.LocalDate
+import kotlin.math.abs
 
 object Routes {
+    const val MAIN = "main"
     const val HOME = "home"
     const val TRANSACTIONS = "transactions"
     const val STATISTICS = "statistics"
@@ -96,56 +114,58 @@ object Routes {
     }
 }
 
-internal data class TopLevelDestination(
+enum class TopLevelPage(
     val route: String,
     val label: String,
-    val icon: androidx.compose.ui.graphics.vector.ImageVector,
-    val matchRoute: String = route,
-)
-
-private val topLevelDestinations = listOf(
-    TopLevelDestination(Routes.HOME, "首页", Icons.Default.Home),
-    TopLevelDestination(
-        Routes.TRANSACTIONS,
-        "明细",
-        Icons.AutoMirrored.Filled.List,
-        matchRoute = Routes.TRANSACTIONS_PATTERN,
-    ),
-    TopLevelDestination(Routes.STATISTICS, "统计", Icons.Default.Assessment),
-    TopLevelDestination(Routes.SETTINGS, "设置", Icons.Default.Settings),
-)
-
-private val topLevelRoutes = topLevelDestinations.map { it.matchRoute }.toSet()
-
-private fun isTopLevelRoute(route: String?) = route in topLevelRoutes
-
-@Composable
-private fun RowScope.TopLevelNavItem(
-    destination: TopLevelDestination,
-    currentRoute: String?,
-    navController: NavHostController,
+    val icon: ImageVector,
 ) {
-    NavigationBarItem(
-        selected = currentRoute == destination.matchRoute,
-        onClick = {
-            navController.navigate(destination.route) {
-                popUpTo(navController.graph.findStartDestination().id) {
-                    saveState = true
-                }
-                launchSingleTop = true
-                restoreState = true
-            }
-        },
-        icon = {
-            Icon(destination.icon, contentDescription = destination.label)
-        },
-        label = { Text(destination.label) },
-    )
+    Home(Routes.HOME, "首页", Icons.Default.Home),
+    Transactions(Routes.TRANSACTIONS, "明细", Icons.AutoMirrored.Filled.List),
+    Statistics(Routes.STATISTICS, "统计", Icons.Default.Assessment),
+    Settings(Routes.SETTINGS, "设置", Icons.Default.Settings),
+    ;
+
+    companion object {
+        fun fromIndex(index: Int): TopLevelPage = entries[index.coerceIn(0, entries.lastIndex)]
+    }
 }
+
+internal const val TAB_SWITCH_MILLIS = 280
+
+internal fun <T> tabSwitchTween() = tween<T>(durationMillis = TAB_SWITCH_MILLIS, easing = FastOutSlowInEasing)
+
+internal fun pageFadeAlpha(currentPage: Int, currentPageOffsetFraction: Float, page: Int): Float {
+    val distance = abs((currentPage - page) + currentPageOffsetFraction).coerceIn(0f, 1f)
+    return 1f - 0.28f * distance
+}
+
+internal fun isFilteredTransactionRoute(route: String?): Boolean {
+    if (route == null) return false
+    return route == Routes.TRANSACTIONS_PATTERN || route.startsWith("transactions?")
+}
+
+val LocalSelectTopLevelPage = staticCompositionLocalOf<(TopLevelPage) -> Unit> { {} }
 
 @Composable
 fun AppNavHost(appSession: AppSession, pendingNavigation: PendingNavigation) {
     val navController = rememberNavController()
+    val pagerState = rememberPagerState(pageCount = { TopLevelPage.entries.size })
+    val scope = rememberCoroutineScope()
+    val gate = remember { PagerGestureGate() }
+    val pendingPage = remember { mutableStateOf<Int?>(null) }
+    val selectPage: (TopLevelPage) -> Unit = remember(navController, pagerState, scope, pendingPage) {
+        { page ->
+            val onMain = navController.currentDestination?.route == Routes.MAIN
+            if (!onMain) {
+                pendingPage.value = page.ordinal
+                navController.popBackStack(Routes.MAIN, inclusive = false)
+            } else {
+                scope.launch {
+                    pagerState.animateScrollToPage(page.ordinal, animationSpec = tabSwitchTween())
+                }
+            }
+        }
+    }
     LaunchedEffect(pendingNavigation) {
         pendingNavigation.routes.collect { route ->
             if (!route.isNullOrBlank()) {
@@ -156,145 +176,204 @@ fun AppNavHost(appSession: AppSession, pendingNavigation: PendingNavigation) {
     }
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
-    val isTopLevel = topLevelDestinations.any { it.matchRoute == currentRoute }
+    val showBottomBar = currentRoute == Routes.MAIN || isFilteredTransactionRoute(currentRoute)
 
-    Scaffold(
-        bottomBar = {
-            if (isTopLevel) {
-                LedgerBottomBar(
-                    currentRoute = currentRoute,
-                    onNavigate = { destination ->
-                        navController.navigate(destination.route) {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    },
-                    onCreate = { navController.navigate(Routes.transactionNew()) },
-                )
+    CompositionLocalProvider(
+        LocalPagerGestureGate provides gate,
+        LocalSelectTopLevelPage provides selectPage,
+    ) {
+        Scaffold(
+            bottomBar = {
+                if (showBottomBar) {
+                    PagerNavigationBar(
+                        pagerState = pagerState,
+                        currentRoute = currentRoute,
+                        onSelect = selectPage,
+                        onCreate = { navController.navigate(Routes.transactionNew()) },
+                    )
+                }
+            },
+        ) { padding ->
+            NavHost(
+                navController = navController,
+                startDestination = Routes.MAIN,
+                modifier = Modifier
+                    .padding(padding)
+                    .background(MaterialTheme.colorScheme.background),
+                enterTransition = {
+                    slideInHorizontally(tabSwitchTween()) { it } + fadeIn(tabSwitchTween())
+                },
+                exitTransition = {
+                    slideOutHorizontally(tabSwitchTween()) { -it / 4 } + fadeOut(tabSwitchTween())
+                },
+                popEnterTransition = {
+                    slideInHorizontally(tabSwitchTween()) { -it / 4 } + fadeIn(tabSwitchTween())
+                },
+                popExitTransition = {
+                    slideOutHorizontally(tabSwitchTween()) { it } + fadeOut(tabSwitchTween())
+                },
+            ) {
+                composable(Routes.MAIN) {
+                    TopLevelPager(
+                        appSession = appSession,
+                        navController = navController,
+                        pagerState = pagerState,
+                        gestureGate = gate,
+                        pendingPage = pendingPage.value,
+                        onPendingPageConsumed = { pendingPage.value = null },
+                    )
+                }
+                composable(
+                    route = Routes.TRANSACTIONS_PATTERN,
+                    arguments = listOf(
+                        navArgument("type") {
+                            type = NavType.StringType
+                            nullable = true
+                            defaultValue = null
+                        },
+                        navArgument("categoryId") {
+                            type = NavType.StringType
+                            nullable = true
+                            defaultValue = null
+                        },
+                        navArgument("accountId") {
+                            type = NavType.StringType
+                            nullable = true
+                            defaultValue = null
+                        },
+                        navArgument("startDate") {
+                            type = NavType.StringType
+                            nullable = true
+                            defaultValue = null
+                        },
+                        navArgument("endDate") {
+                            type = NavType.StringType
+                            nullable = true
+                            defaultValue = null
+                        },
+                    ),
+                ) {
+                    TransactionListScreen(appSession = appSession, navController = navController)
+                }
+                composable(Routes.LEDGERS) {
+                    LedgerManageScreen(appSession = appSession, navController = navController)
+                }
+                composable(Routes.ACCOUNTS) {
+                    AccountManageScreen(appSession = appSession, navController = navController)
+                }
+                composable(Routes.BUDGETS) {
+                    BudgetManageScreen(navController = navController)
+                }
+                composable(Routes.RECURRING) {
+                    RecurringRuleScreen(navController = navController)
+                }
+                composable(Routes.IMPORT) {
+                    BillImportScreen(navController = navController)
+                }
+                composable(Routes.AUTO_RECORD) {
+                    AutoRecordScreen(appSession = appSession, navController = navController)
+                }
+                composable(Routes.DRAFTS) {
+                    DraftInboxScreen(navController = navController)
+                }
+                composable(
+                    route = Routes.CATEGORIES,
+                    arguments = listOf(navArgument("categoryType") { type = NavType.StringType }),
+                ) {
+                    CategoryManageScreen(appSession = appSession, navController = navController)
+                }
+                composable(
+                    route = Routes.TRANSACTION_NEW,
+                    arguments = listOf(
+                        navArgument("type") {
+                            type = NavType.StringType
+                            nullable = true
+                            defaultValue = TransactionType.EXPENSE.name
+                        },
+                    ),
+                ) {
+                    TransactionEditorScreen(appSession = appSession, navController = navController)
+                }
+                composable(
+                    route = Routes.TRANSACTION_EDIT,
+                    arguments = listOf(navArgument("transactionId") { type = NavType.StringType }),
+                ) {
+                    TransactionEditorScreen(appSession = appSession, navController = navController)
+                }
             }
-        },
-    ) { padding ->
-        NavHost(
-            navController = navController,
-            startDestination = Routes.HOME,
-            modifier = Modifier.padding(padding),
-            enterTransition = {
-                if (isTopLevelRoute(initialState.destination.route) && isTopLevelRoute(targetState.destination.route)) {
-                    fadeIn(tween(220))
-                } else {
-                    slideInHorizontally(tween(280)) { it } + fadeIn(tween(180))
-                }
-            },
-            exitTransition = {
-                if (isTopLevelRoute(initialState.destination.route) && isTopLevelRoute(targetState.destination.route)) {
-                    fadeOut(tween(180))
-                } else {
-                    slideOutHorizontally(tween(280)) { -it / 4 } + fadeOut(tween(180))
-                }
-            },
-            popEnterTransition = {
-                if (isTopLevelRoute(initialState.destination.route) && isTopLevelRoute(targetState.destination.route)) {
-                    fadeIn(tween(220))
-                } else {
-                    slideInHorizontally(tween(280)) { -it / 4 } + fadeIn(tween(180))
-                }
-            },
-            popExitTransition = {
-                if (isTopLevelRoute(initialState.destination.route) && isTopLevelRoute(targetState.destination.route)) {
-                    fadeOut(tween(180))
-                } else {
-                    slideOutHorizontally(tween(280)) { it } + fadeOut(tween(180))
-                }
-            },
+        }
+    }
+}
+
+@Composable
+private fun PagerNavigationBar(
+    pagerState: PagerState,
+    currentRoute: String?,
+    onSelect: (TopLevelPage) -> Unit,
+    onCreate: () -> Unit,
+) {
+    val selectedPage = if (isFilteredTransactionRoute(currentRoute)) {
+        TopLevelPage.Transactions
+    } else {
+        TopLevelPage.fromIndex(pagerState.targetPage)
+    }
+    LedgerBottomBar(
+        selectedPage = selectedPage,
+        onSelect = onSelect,
+        onCreate = onCreate,
+    )
+}
+
+@Composable
+private fun TopLevelPager(
+    appSession: AppSession,
+    navController: NavHostController,
+    pagerState: PagerState,
+    gestureGate: PagerGestureGate,
+    pendingPage: Int?,
+    onPendingPageConsumed: () -> Unit,
+) {
+    val saveableStateHolder = rememberSaveableStateHolder()
+    LaunchedEffect(pendingPage) {
+        val target = pendingPage ?: return@LaunchedEffect
+        pagerState.animateScrollToPage(target, animationSpec = tabSwitchTween())
+        onPendingPageConsumed()
+    }
+    HorizontalPager(
+        state = pagerState,
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+        beyondViewportPageCount = 1,
+        userScrollEnabled = gestureGate.userScrollEnabled,
+        flingBehavior = PagerDefaults.flingBehavior(
+            state = pagerState,
+            snapAnimationSpec = tabSwitchTween(),
+        ),
+        key = { TopLevelPage.entries[it].route },
+    ) { page ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .graphicsLayer {
+                    alpha = pageFadeAlpha(
+                        pagerState.currentPage,
+                        pagerState.currentPageOffsetFraction,
+                        page,
+                    )
+                },
         ) {
-            composable(Routes.HOME) {
-                HomeScreen(appSession = appSession, navController = navController)
-            }
-            composable(
-                route = Routes.TRANSACTIONS_PATTERN,
-                arguments = listOf(
-                    navArgument("type") {
-                        type = NavType.StringType
-                        nullable = true
-                        defaultValue = null
-                    },
-                    navArgument("categoryId") {
-                        type = NavType.StringType
-                        nullable = true
-                        defaultValue = null
-                    },
-                    navArgument("accountId") {
-                        type = NavType.StringType
-                        nullable = true
-                        defaultValue = null
-                    },
-                    navArgument("startDate") {
-                        type = NavType.StringType
-                        nullable = true
-                        defaultValue = null
-                    },
-                    navArgument("endDate") {
-                        type = NavType.StringType
-                        nullable = true
-                        defaultValue = null
-                    },
-                ),
-            ) {
-                TransactionListScreen(appSession = appSession, navController = navController)
-            }
-            composable(Routes.STATISTICS) {
-                StatisticsScreen(appSession = appSession, navController = navController)
-            }
-            composable(Routes.SETTINGS) {
-                SettingsScreen(appSession = appSession, navController = navController)
-            }
-            composable(Routes.LEDGERS) {
-                LedgerManageScreen(appSession = appSession, navController = navController)
-            }
-            composable(Routes.ACCOUNTS) {
-                AccountManageScreen(appSession = appSession, navController = navController)
-            }
-            composable(Routes.BUDGETS) {
-                BudgetManageScreen(navController = navController)
-            }
-            composable(Routes.RECURRING) {
-                RecurringRuleScreen(navController = navController)
-            }
-            composable(Routes.IMPORT) {
-                BillImportScreen(navController = navController)
-            }
-            composable(Routes.AUTO_RECORD) {
-                AutoRecordScreen(appSession = appSession, navController = navController)
-            }
-            composable(Routes.DRAFTS) {
-                DraftInboxScreen(navController = navController)
-            }
-            composable(
-                route = Routes.CATEGORIES,
-                arguments = listOf(navArgument("categoryType") { type = NavType.StringType }),
-            ) {
-                CategoryManageScreen(appSession = appSession, navController = navController)
-            }
-            composable(
-                route = Routes.TRANSACTION_NEW,
-                arguments = listOf(
-                    navArgument("type") {
-                        type = NavType.StringType
-                        nullable = true
-                        defaultValue = TransactionType.EXPENSE.name
-                    },
-                ),
-            ) {
-                TransactionEditorScreen(appSession = appSession, navController = navController)
-            }
-            composable(
-                route = Routes.TRANSACTION_EDIT,
-                arguments = listOf(navArgument("transactionId") { type = NavType.StringType }),
-            ) {
-                TransactionEditorScreen(appSession = appSession, navController = navController)
+            saveableStateHolder.SaveableStateProvider(TopLevelPage.entries[page].route) {
+                when (TopLevelPage.entries[page]) {
+                    TopLevelPage.Home -> HomeScreen(appSession = appSession, navController = navController)
+                    TopLevelPage.Transactions ->
+                        TransactionListScreen(appSession = appSession, navController = navController)
+                    TopLevelPage.Statistics ->
+                        StatisticsScreen(appSession = appSession, navController = navController)
+                    TopLevelPage.Settings ->
+                        SettingsScreen(appSession = appSession, navController = navController)
+                }
             }
         }
     }
@@ -302,17 +381,17 @@ fun AppNavHost(appSession: AppSession, pendingNavigation: PendingNavigation) {
 
 @Composable
 internal fun LedgerBottomBar(
-    currentRoute: String?,
-    onNavigate: (TopLevelDestination) -> Unit,
+    selectedPage: TopLevelPage,
+    onSelect: (TopLevelPage) -> Unit,
     onCreate: () -> Unit,
 ) {
     NavigationBar {
-        topLevelDestinations.take(2).forEach { destination ->
+        TopLevelPage.entries.take(2).forEach { page ->
             NavigationBarItem(
-                selected = currentRoute == destination.matchRoute,
-                onClick = { onNavigate(destination) },
-                icon = { Icon(destination.icon, contentDescription = destination.label) },
-                label = { Text(destination.label) },
+                selected = selectedPage == page,
+                onClick = { onSelect(page) },
+                icon = { Icon(page.icon, contentDescription = page.label) },
+                label = { Text(page.label) },
             )
         }
         NavigationBarItem(
@@ -328,12 +407,12 @@ internal fun LedgerBottomBar(
             },
             label = { Text("记一笔") },
         )
-        topLevelDestinations.drop(2).forEach { destination ->
+        TopLevelPage.entries.drop(2).forEach { page ->
             NavigationBarItem(
-                selected = currentRoute == destination.matchRoute,
-                onClick = { onNavigate(destination) },
-                icon = { Icon(destination.icon, contentDescription = destination.label) },
-                label = { Text(destination.label) },
+                selected = selectedPage == page,
+                onClick = { onSelect(page) },
+                icon = { Icon(page.icon, contentDescription = page.label) },
+                label = { Text(page.label) },
             )
         }
     }

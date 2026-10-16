@@ -30,8 +30,14 @@ android {
     }
 
     buildTypes {
-        release {
+        debug {
+            // Debug stays unminified. It is slower than release: no R8, extra Compose
+            // checks, and the baseline profile is not compiled into a speed profile.
             isMinifyEnabled = false
+        }
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -73,6 +79,7 @@ room {
 dependencies {
     implementation("androidx.core:core-ktx:1.16.0")
     implementation("androidx.core:core-splashscreen:1.0.1")
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
 
     implementation(platform("androidx.compose:compose-bom:2025.04.01"))
     implementation("androidx.compose.ui:ui")

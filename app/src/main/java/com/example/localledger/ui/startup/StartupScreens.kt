@@ -18,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -33,9 +34,11 @@ fun InitializationLoadingScreen() {
     ) {
         Image(
             painter = painterResource(R.drawable.ic_onboarding_cow),
-            contentDescription = "牛牛记账",
+            contentDescription = stringResource(R.string.app_name),
             modifier = Modifier.size(120.dp),
         )
+        Spacer(Modifier.height(16.dp))
+        Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(24.dp))
         CircularProgressIndicator(modifier = Modifier.size(36.dp))
         Spacer(Modifier.height(16.dp))
@@ -76,9 +79,11 @@ fun DataLossNoticeScreen(onAcknowledge: () -> Unit) {
     ) {
         Image(
             painter = painterResource(R.drawable.ic_onboarding_cow),
-            contentDescription = "牛牛记账",
+            contentDescription = stringResource(R.string.app_name),
             modifier = Modifier.size(140.dp),
         )
+        Spacer(Modifier.height(12.dp))
+        Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(20.dp))
         Text(
             "数据只保存在本机",

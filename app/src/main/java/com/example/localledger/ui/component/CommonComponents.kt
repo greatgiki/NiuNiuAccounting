@@ -46,6 +46,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.localledger.domain.model.TransactionType
 import com.example.localledger.ui.common.CategoryIcons
+import com.example.localledger.ui.navigation.claimPagerHorizontalGesture
 import com.example.localledger.ui.common.DateTimeFormatters
 import com.example.localledger.ui.common.MoneyFormatter
 import com.example.localledger.ui.common.categoryAccent
@@ -240,7 +241,9 @@ fun SwipeToDeleteRow(
     )
     SwipeToDismissBox(
         state = dismissState,
-        modifier = modifier.semantics { contentDescription = "向左滑动可删除" },
+        modifier = modifier
+            .claimPagerHorizontalGesture()
+            .semantics { contentDescription = "向左滑动可删除" },
         enableDismissFromStartToEnd = false,
         backgroundContent = {
             Box(
