@@ -390,7 +390,7 @@ private fun EditorContent(
 }
 
 @Composable
-private fun AmountKeypad(onKey: (String) -> Unit) {
+internal fun AmountKeypad(onKey: (String) -> Unit) {
     val rows = listOf(
         listOf("1", "2", "3"),
         listOf("4", "5", "6"),

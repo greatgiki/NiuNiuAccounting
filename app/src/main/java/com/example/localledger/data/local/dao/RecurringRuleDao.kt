@@ -58,6 +58,9 @@ interface RecurringRuleDao {
     @Query("DELETE FROM recurring_rules WHERE id = :id AND ledger_id = :ledgerId")
     suspend fun delete(id: String, ledgerId: String): Int
 
+    @Query("SELECT transaction_id FROM recurring_occurrences WHERE rule_id = :ruleId")
+    suspend fun occurrenceTransactionIds(ruleId: String): List<String>
+
     @Query("UPDATE recurring_rules SET next_run_date = :nextRunDate, updated_at = :updatedAt WHERE id = :id")
     suspend fun updateNextRun(id: String, nextRunDate: String, updatedAt: Long)
 

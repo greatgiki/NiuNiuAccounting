@@ -102,7 +102,29 @@ class WalletMigrationTest {
         migrated.close()
     }
 
+    @Test
+    fun migrate2To3CopiesTheCurrentSnapshotIntoHistory() {
+        helper.createDatabase(HISTORY_DB, 2).apply {
+            execSQL(
+                """
+                INSERT INTO exchange_rate_snapshots (base_code, rates_json, fetched_at, source)
+                VALUES ('CNY', '{"USD":"0.14"}', 42, 'cache')
+                """.trimIndent(),
+            )
+            close()
+        }
+        val migrated = helper.runMigrationsAndValidate(HISTORY_DB, 3, true, *WalletDatabase.MIGRATIONS)
+        migrated.query("SELECT rates_json, fetched_at, source FROM exchange_rate_history WHERE base_code = 'CNY'").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("{\"USD\":\"0.14\"}", cursor.getString(0))
+            assertEquals(42L, cursor.getLong(1))
+            assertEquals("cache", cursor.getString(2))
+        }
+        migrated.close()
+    }
+
     private companion object {
         const val TEST_DB = "migration-test"
+        const val HISTORY_DB = "migration-history"
     }
 }

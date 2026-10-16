@@ -8,7 +8,9 @@ import com.example.localledger.data.mapper.toEntity
 import com.example.localledger.domain.error.LedgerException
 import com.example.localledger.domain.model.CategoryType
 import com.example.localledger.domain.model.RecurringRule
+import com.example.localledger.domain.model.ResumeChoice
 import com.example.localledger.domain.model.TransactionType
+import com.example.localledger.domain.recurrence.RecurrenceSchedule
 import com.example.localledger.domain.repository.RecurringRuleRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
@@ -52,9 +54,41 @@ class RecurringRuleRepositoryImpl @Inject constructor(
         if (updated != 1) throw LedgerException.RecurringRuleNotFound()
     }
 
-    override suspend fun delete(ledgerId: String, ruleId: String) = writeOperation {
+    override suspend fun resume(
+        ledgerId: String,
+        ruleId: String,
+        choice: ResumeChoice,
+        today: LocalDate,
+    ) = writeOperation {
         val database = databaseProvider.get()
         database.withTransaction {
+            val existing = database.recurringRuleDao().findById(ruleId)
+                ?: throw LedgerException.RecurringRuleNotFound()
+            if (existing.ledgerId != ledgerId) throw LedgerException.RecurringRuleNotFound()
+            val now = clock.millis()
+            if (choice == ResumeChoice.SKIP_MISSED) {
+                val next = RecurrenceSchedule.nextAfter(
+                    LocalDate.parse(existing.startDate),
+                    existing.period,
+                    today,
+                )
+                database.recurringRuleDao().updateNextRun(ruleId, next.toString(), now)
+            }
+            if (database.recurringRuleDao().setPaused(ruleId, ledgerId, false, now) != 1) {
+                throw LedgerException.RecurringRuleNotFound()
+            }
+        }
+        Unit
+    }
+
+    override suspend fun delete(ledgerId: String, ruleId: String, deleteGenerated: Boolean) = writeOperation {
+        val database = databaseProvider.get()
+        database.withTransaction {
+            if (deleteGenerated) {
+                database.recurringRuleDao().occurrenceTransactionIds(ruleId).forEach { transactionId ->
+                    database.transactionDao().deleteById(transactionId, ledgerId)
+                }
+            }
             if (database.recurringRuleDao().delete(ruleId, ledgerId) != 1) {
                 throw LedgerException.RecurringRuleNotFound()
             }

@@ -16,6 +16,7 @@ import com.example.localledger.data.local.dao.TransactionDao
 import com.example.localledger.data.local.entity.AccountEntity
 import com.example.localledger.data.local.entity.BudgetEntity
 import com.example.localledger.data.local.entity.CategoryEntity
+import com.example.localledger.data.local.entity.ExchangeRateHistoryEntity
 import com.example.localledger.data.local.entity.ExchangeRateSnapshotEntity
 import com.example.localledger.data.local.entity.LedgerEntity
 import com.example.localledger.data.local.entity.RecurringOccurrenceEntity
@@ -32,8 +33,9 @@ import com.example.localledger.data.local.entity.TransactionEntity
         RecurringRuleEntity::class,
         RecurringOccurrenceEntity::class,
         ExchangeRateSnapshotEntity::class,
+        ExchangeRateHistoryEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 @TypeConverters(RoomConverters::class)
@@ -48,7 +50,7 @@ abstract class WalletDatabase : RoomDatabase() {
 
     companion object {
         const val FILE_NAME = "ledger.db"
-        val MIGRATIONS = arrayOf(MIGRATION_1_2)
+        val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
 
         val INTEGRITY_CALLBACK = object : Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {
@@ -241,6 +243,28 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
               `source` TEXT NOT NULL,
               PRIMARY KEY(`base_code`)
             )
+            """.trimIndent(),
+        )
+    }
+}
+
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `exchange_rate_history` (
+              `base_code` TEXT NOT NULL,
+              `fetched_at` INTEGER NOT NULL,
+              `rates_json` TEXT NOT NULL,
+              `source` TEXT NOT NULL,
+              PRIMARY KEY(`base_code`, `fetched_at`)
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            INSERT INTO `exchange_rate_history` (`base_code`, `fetched_at`, `rates_json`, `source`)
+            SELECT `base_code`, `fetched_at`, `rates_json`, `source` FROM `exchange_rate_snapshots`
             """.trimIndent(),
         )
     }

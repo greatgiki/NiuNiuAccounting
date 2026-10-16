@@ -84,10 +84,8 @@ class TransactionRepositoryImpl @Inject constructor(
                 if (it.type != requiredType) throw LedgerException.CategoryTypeMismatch()
             }
 
-            val existing = command.transactionId?.let { id ->
-                database.transactionDao().findById(id)
-                    ?: throw LedgerException.TransactionNotFound()
-            }
+            val requestedId = command.transactionId
+            val existing = requestedId?.let { database.transactionDao().findById(it) }
             if (existing != null && existing.ledgerId != command.ledgerId) {
                 throw LedgerException.TransactionLedgerMismatch()
             }
@@ -110,7 +108,7 @@ class TransactionRepositoryImpl @Inject constructor(
                 CurrencyConverter.basePerAccountUnit(sourceCurrency, ledgerCurrency, snapshot),
             )
 
-            val id = existing?.id ?: UUID.randomUUID().toString()
+            val id = existing?.id ?: requestedId ?: UUID.randomUUID().toString()
             val now = clock.millis()
             database.transactionDao().upsert(
                 TransactionEntity(

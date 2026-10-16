@@ -1,8 +1,10 @@
 package com.example.localledger.data.repository
 
+import androidx.room.withTransaction
 import com.example.localledger.data.local.database.WalletDatabaseSource
 import com.example.localledger.data.mapper.toDomain
 import com.example.localledger.data.mapper.toEntity
+import com.example.localledger.data.mapper.toHistoryEntity
 import com.example.localledger.domain.model.ExchangeRateSnapshot
 import com.example.localledger.domain.repository.ExchangeRateRepository
 import kotlinx.coroutines.flow.Flow
@@ -26,7 +28,11 @@ class ExchangeRateRepositoryImpl @Inject constructor(
         databaseProvider.get().exchangeRateDao().find(baseCode)?.toDomain()
 
     override suspend fun save(snapshot: ExchangeRateSnapshot) = writeOperation {
-        databaseProvider.get().exchangeRateDao().upsert(snapshot.toEntity())
+        val database = databaseProvider.get()
+        database.withTransaction {
+            database.exchangeRateDao().upsert(snapshot.toEntity())
+            database.exchangeRateDao().insertHistory(snapshot.toHistoryEntity())
+        }
         Unit
     }
 

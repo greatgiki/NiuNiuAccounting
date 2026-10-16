@@ -264,3 +264,14 @@ data class ExchangeRateSnapshotEntity(
     @ColumnInfo(name = "fetched_at") val fetchedAt: Long,
     val source: String,
 )
+
+@Entity(
+    tableName = "exchange_rate_history",
+    primaryKeys = ["base_code", "fetched_at"],
+)
+data class ExchangeRateHistoryEntity(
+    @ColumnInfo(name = "base_code") val baseCode: String,
+    @ColumnInfo(name = "fetched_at") val fetchedAt: Long,
+    @ColumnInfo(name = "rates_json") val ratesJson: String,
+    val source: String,
+)

@@ -44,6 +44,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import com.example.localledger.domain.model.RecurrencePeriod
 import com.example.localledger.domain.model.RecurringRule
+import com.example.localledger.domain.model.ResumeChoice
 import com.example.localledger.domain.model.TransactionType
 import com.example.localledger.ui.common.DateTimeFormatters
 import com.example.localledger.ui.common.MoneyFormatter
@@ -62,6 +63,8 @@ fun RecurringRuleScreen(
     val snackbar = remember { SnackbarHostState() }
     var editing by remember { mutableStateOf<RecurringRule?>(null) }
     var creating by remember { mutableStateOf(false) }
+    var resumeTarget by remember { mutableStateOf<RecurringRule?>(null) }
+    var deleteTarget by remember { mutableStateOf<RecurringRule?>(null) }
 
     LaunchedEffect(Unit) {
         viewModel.effects.collect { effect ->
@@ -106,14 +109,43 @@ fun RecurringRuleScreen(
                     RuleRow(
                         rule = rule,
                         onEdit = { editing = rule },
-                        onPause = { viewModel.pause(rule, it) },
-                        onDelete = { viewModel.delete(rule) },
+                        onPause = { viewModel.pause(rule) },
+                        onResume = { resumeTarget = rule },
+                        onDelete = { deleteTarget = rule },
                     )
                     HorizontalDivider()
                 }
                 item { Spacer(Modifier.height(96.dp)) }
             }
         }
+    }
+
+    resumeTarget?.let { rule ->
+        ResumeRuleDialog(
+            onBackfill = {
+                resumeTarget = null
+                viewModel.resume(rule, ResumeChoice.BACKFILL)
+            },
+            onSkip = {
+                resumeTarget = null
+                viewModel.resume(rule, ResumeChoice.SKIP_MISSED)
+            },
+            onDismiss = { resumeTarget = null },
+        )
+    }
+
+    deleteTarget?.let { rule ->
+        DeleteRuleDialog(
+            onKeepTransactions = {
+                deleteTarget = null
+                viewModel.delete(rule, deleteGenerated = false)
+            },
+            onDeleteTransactions = {
+                deleteTarget = null
+                viewModel.delete(rule, deleteGenerated = true)
+            },
+            onDismiss = { deleteTarget = null },
+        )
     }
 
     if (creating || editing != null) {
@@ -137,7 +169,8 @@ fun RecurringRuleScreen(
 private fun RuleRow(
     rule: RecurringRule,
     onEdit: () -> Unit,
-    onPause: (Boolean) -> Unit,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
     onDelete: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
@@ -155,7 +188,10 @@ private fun RuleRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Switch(checked = !rule.paused, onCheckedChange = { onPause(!it) })
+            Switch(
+                checked = !rule.paused,
+                onCheckedChange = { active -> if (active) onResume() else onPause() },
+            )
         }
         Row {
             TextButton(onClick = onEdit) { Text("编辑") }
@@ -170,7 +206,51 @@ private fun RuleRow(
 }
 
 @Composable
-private fun RuleDialog(
+internal fun ResumeRuleDialog(
+    onBackfill: () -> Unit,
+    onSkip: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("恢复这条周期规则？") },
+        text = { Text("暂停期间错过的日期，可以现在补记，也可以跳到下一次，不再生成那些日期。") },
+        confirmButton = {
+            TextButton(onClick = onBackfill) { Text("补记错过的日期") }
+        },
+        dismissButton = {
+            Column {
+                TextButton(onClick = onSkip) { Text("跳到下一次") }
+                TextButton(onClick = onDismiss) { Text("取消") }
+            }
+        },
+    )
+}
+
+@Composable
+internal fun DeleteRuleDialog(
+    onKeepTransactions: () -> Unit,
+    onDeleteTransactions: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("删除周期规则？") },
+        text = { Text("规则删除后不再自动记账。已经生成的流水可以保留，也可以一并删除。") },
+        confirmButton = {
+            TextButton(onClick = onKeepTransactions) { Text("只删除规则") }
+        },
+        dismissButton = {
+            Column {
+                TextButton(onClick = onDeleteTransactions) { Text("同时删除已生成流水") }
+                TextButton(onClick = onDismiss) { Text("取消") }
+            }
+        },
+    )
+}
+
+@Composable
+internal fun RuleDialog(
     state: RecurringUiState,
     existing: RecurringRule?,
     onDismiss: () -> Unit,

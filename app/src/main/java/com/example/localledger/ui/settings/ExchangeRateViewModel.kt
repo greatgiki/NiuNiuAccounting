@@ -2,9 +2,12 @@ package com.example.localledger.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.localledger.domain.error.LedgerException
 import com.example.localledger.domain.model.ExchangeRateSnapshot
 import com.example.localledger.domain.money.CfetsCcpr
 import com.example.localledger.domain.repository.ExchangeRateRepository
+import com.example.localledger.domain.repository.LedgerRepository
+import kotlinx.coroutines.CancellationException
 import com.example.localledger.domain.usecase.RefreshExchangeRateResult
 import com.example.localledger.domain.usecase.RefreshExchangeRatesUseCase
 import com.example.localledger.ui.AppSession
@@ -31,9 +34,10 @@ data class ExchangeRateUiState(
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class ExchangeRateViewModel @Inject constructor(
-    appSession: AppSession,
+    private val appSession: AppSession,
     repository: ExchangeRateRepository,
     private val refreshRates: RefreshExchangeRatesUseCase,
+    private val ledgerRepository: LedgerRepository,
 ) : ViewModel() {
     private val beijing = CfetsCcpr.BEIJING
     private val messages = Channel<String>(Channel.BUFFERED)
@@ -46,6 +50,20 @@ class ExchangeRateViewModel @Inject constructor(
             }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ExchangeRateUiState())
+
+    fun revalueWithCurrentRates() {
+        val ledgerId = appSession.state.value.currentLedgerId ?: return
+        viewModelScope.launch {
+            try {
+                val count = ledgerRepository.revalueWithCurrentRates(ledgerId)
+                messages.send(if (count == 0) "没有需要重算的流水" else "已按当前汇率重算 $count 笔流水的本位币金额")
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: LedgerException) {
+                messages.send(error.message ?: "重算失败")
+            }
+        }
+    }
 
     fun refresh() {
         val base = uiState.value.currencyCode

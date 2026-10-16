@@ -33,6 +33,18 @@ interface TransactionDao {
     @Query("DELETE FROM transactions WHERE id = :id AND ledger_id = :ledgerId")
     suspend fun deleteById(id: String, ledgerId: String): Int
 
+    @Query("SELECT * FROM transactions WHERE ledger_id = :ledgerId ORDER BY transaction_at ASC, created_at ASC")
+    suspend fun listByLedger(ledgerId: String): List<TransactionEntity>
+
+    @Query(
+        """
+        UPDATE transactions
+        SET base_amount_minor = :baseAmountMinor, fx_rate = :fxRate, updated_at = :updatedAt
+        WHERE id = :id
+        """,
+    )
+    suspend fun updateValuation(id: String, baseAmountMinor: Long, fxRate: String, updatedAt: Long): Int
+
     @Query(
         """
         SELECT t.*,

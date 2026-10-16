@@ -12,6 +12,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -128,6 +129,7 @@ fun SettingsScreen(
 private fun ExchangeRateSection(viewModel: ExchangeRateViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var message by remember { mutableStateOf<String?>(null) }
+    var confirmRevalue by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         viewModel.effects.collect { message = it }
     }
@@ -149,7 +151,7 @@ private fun ExchangeRateSection(viewModel: ExchangeRateViewModel = hiltViewModel
                 )
             }
             Text(
-                "外币流水按保存时的汇率折算进本位币，之后汇率变化不会改写已入账金额。",
+                "保存时写入当时的本位币金额。刷新汇率不会自动改历史。需要时可以按当前缓存重算，账户原币金额和手工填写的转入金额保持不变。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp),
@@ -158,8 +160,38 @@ private fun ExchangeRateSection(viewModel: ExchangeRateViewModel = hiltViewModel
                 Text(message ?: "", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
             }
             TextButton(onClick = viewModel::refresh) { Text("刷新汇率") }
+            TextButton(onClick = { confirmRevalue = true }) { Text("按当前汇率重算历史") }
         }
     }
+    if (confirmRevalue) {
+        RevalueConfirmDialog(
+            onConfirm = {
+                confirmRevalue = false
+                viewModel.revalueWithCurrentRates()
+            },
+            onDismiss = { confirmRevalue = false },
+        )
+    }
+}
+
+@Composable
+internal fun RevalueConfirmDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("按当前汇率重算？") },
+        text = {
+            Text("将用当前缓存汇率重算本账本全部流水的本位币金额，不按各笔流水的日期挑选历史汇率。此操作不可撤销。")
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text("重算") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        },
+    )
 }
 
 @Composable

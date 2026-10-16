@@ -9,6 +9,7 @@ import com.example.localledger.domain.model.Category
 import com.example.localledger.domain.model.CategoryType
 import com.example.localledger.domain.model.RecurrencePeriod
 import com.example.localledger.domain.model.RecurringRule
+import com.example.localledger.domain.model.ResumeChoice
 import com.example.localledger.domain.model.TransactionType
 import com.example.localledger.domain.money.CurrencyCatalog
 import com.example.localledger.domain.repository.AccountRepository
@@ -16,6 +17,7 @@ import com.example.localledger.domain.repository.CategoryRepository
 import com.example.localledger.domain.repository.RecurringRuleRepository
 import com.example.localledger.domain.time.ZoneIdProvider
 import com.example.localledger.domain.usecase.DeleteRecurringRuleUseCase
+import com.example.localledger.domain.usecase.ResumeRecurringRuleUseCase
 import com.example.localledger.domain.usecase.SaveRecurringRuleUseCase
 import com.example.localledger.domain.usecase.SetRecurringRulePausedUseCase
 import com.example.localledger.ui.AppSession
@@ -61,6 +63,7 @@ class RecurringRuleViewModel @Inject constructor(
     private val saveRule: SaveRecurringRuleUseCase,
     private val deleteRule: DeleteRecurringRuleUseCase,
     private val setPaused: SetRecurringRulePausedUseCase,
+    private val resumeRule: ResumeRecurringRuleUseCase,
     private val zoneIdProvider: ZoneIdProvider,
     private val clock: Clock,
 ) : ViewModel() {
@@ -150,20 +153,35 @@ class RecurringRuleViewModel @Inject constructor(
         }
     }
 
-    fun pause(rule: RecurringRule, paused: Boolean) {
+    fun pause(rule: RecurringRule) {
         viewModelScope.launch {
             try {
-                setPaused(rule.ledgerId, rule.id, paused)
+                setPaused(rule.ledgerId, rule.id, true)
             } catch (error: LedgerException) {
                 effectsChannel.send(RecurringEffect.ShowMessage(error.message ?: "更新失败"))
             }
         }
     }
 
-    fun delete(rule: RecurringRule) {
+    fun resume(rule: RecurringRule, choice: ResumeChoice) {
         viewModelScope.launch {
             try {
-                deleteRule(rule.ledgerId, rule.id)
+                val created = resumeRule(rule.ledgerId, rule.id, choice)
+                val message = when (choice) {
+                    ResumeChoice.BACKFILL -> if (created > 0) "已补记 $created 笔" else "没有需要补记的日期"
+                    ResumeChoice.SKIP_MISSED -> "已跳到下一次，不补记错过的日期"
+                }
+                effectsChannel.send(RecurringEffect.ShowMessage(message))
+            } catch (error: LedgerException) {
+                effectsChannel.send(RecurringEffect.ShowMessage(error.message ?: "更新失败"))
+            }
+        }
+    }
+
+    fun delete(rule: RecurringRule, deleteGenerated: Boolean) {
+        viewModelScope.launch {
+            try {
+                deleteRule(rule.ledgerId, rule.id, deleteGenerated)
             } catch (error: LedgerException) {
                 effectsChannel.send(RecurringEffect.ShowMessage(error.message ?: "删除失败"))
             }

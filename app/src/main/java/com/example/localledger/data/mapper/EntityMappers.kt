@@ -3,6 +3,7 @@ package com.example.localledger.data.mapper
 import com.example.localledger.data.local.entity.AccountEntity
 import com.example.localledger.data.local.entity.BudgetEntity
 import com.example.localledger.data.local.entity.CategoryEntity
+import com.example.localledger.data.local.entity.ExchangeRateHistoryEntity
 import com.example.localledger.data.local.entity.ExchangeRateSnapshotEntity
 import com.example.localledger.data.local.entity.LedgerEntity
 import com.example.localledger.data.local.entity.RecurringRuleEntity
@@ -143,6 +144,13 @@ fun ExchangeRateSnapshotEntity.toDomain(): ExchangeRateSnapshot {
         fetchedAt = fetchedAt,
         source = source,
     )
+}
+
+fun ExchangeRateHistoryEntity.toDomain(): ExchangeRateSnapshot =
+    ExchangeRateSnapshotEntity(baseCode, ratesJson, fetchedAt, source).toDomain()
+
+fun ExchangeRateSnapshot.toHistoryEntity() = toEntity().let {
+    ExchangeRateHistoryEntity(it.baseCode, it.fetchedAt, it.ratesJson, it.source)
 }
 
 fun ExchangeRateSnapshot.toEntity() = ExchangeRateSnapshotEntity(

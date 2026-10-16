@@ -240,7 +240,7 @@ fun NameInputDialog(
                 Text("本位币", modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
                 CurrencyChips(selected = currency, onSelect = { currency = it })
                 Text(
-                    "汇总、统计和预算按本位币计算。已入账的历史金额不会按新汇率重算。",
+                    "汇总、统计和预算按本位币计算。更改本位币会重算历史流水的本位币金额：优先用不晚于该笔时间的汇率缓存，如果流水早于全部缓存，则用当前汇率。账户原币金额不变。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 8.dp),
