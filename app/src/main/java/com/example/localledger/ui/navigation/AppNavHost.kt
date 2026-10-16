@@ -1,21 +1,28 @@
 package com.example.localledger.ui.navigation
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -80,7 +87,7 @@ object Routes {
     }
 }
 
-private data class TopLevelDestination(
+internal data class TopLevelDestination(
     val route: String,
     val label: String,
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -92,7 +99,7 @@ private val topLevelDestinations = listOf(
     TopLevelDestination(
         Routes.TRANSACTIONS,
         "明细",
-        Icons.Default.List,
+        Icons.AutoMirrored.Filled.List,
         matchRoute = Routes.TRANSACTIONS_PATTERN,
     ),
     TopLevelDestination(Routes.STATISTICS, "统计", Icons.Default.Assessment),
@@ -109,38 +116,19 @@ fun AppNavHost(appSession: AppSession) {
     Scaffold(
         bottomBar = {
             if (isTopLevel) {
-                NavigationBar {
-                    topLevelDestinations.forEach { destination ->
-                        NavigationBarItem(
-                            selected = currentRoute == destination.matchRoute,
-                            onClick = {
-                                navController.navigate(destination.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
-                            icon = {
-                                Icon(
-                                    destination.icon,
-                                    contentDescription = destination.label,
-                                )
-                            },
-                            label = { Text(destination.label) },
-                        )
-                    }
-                }
-            }
-        },
-        floatingActionButton = {
-            if (isTopLevel) {
-                FloatingActionButton(
-                    onClick = { navController.navigate(Routes.transactionNew()) },
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = "记一笔")
-                }
+                LedgerBottomBar(
+                    currentRoute = currentRoute,
+                    onNavigate = { destination ->
+                        navController.navigate(destination.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    onCreate = { navController.navigate(Routes.transactionNew()) },
+                )
             }
         },
     ) { padding ->
@@ -226,6 +214,52 @@ fun AppNavHost(appSession: AppSession) {
             ) {
                 TransactionEditorScreen(appSession = appSession, navController = navController)
             }
+        }
+    }
+}
+
+@Composable
+internal fun LedgerBottomBar(
+    currentRoute: String?,
+    onNavigate: (TopLevelDestination) -> Unit,
+    onCreate: () -> Unit,
+) {
+    NavigationBar {
+        topLevelDestinations.take(2).forEach { destination ->
+            NavigationBarItem(
+                selected = currentRoute == destination.matchRoute,
+                onClick = { onNavigate(destination) },
+                icon = { Icon(destination.icon, contentDescription = destination.label) },
+                label = { Text(destination.label) },
+            )
+        }
+        NavigationBarItem(
+            selected = false,
+            onClick = onCreate,
+            icon = {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Default.Add,
+                        contentDescription = "记一笔",
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                    )
+                }
+            },
+            label = { Text("记一笔") },
+        )
+        topLevelDestinations.drop(2).forEach { destination ->
+            NavigationBarItem(
+                selected = currentRoute == destination.matchRoute,
+                onClick = { onNavigate(destination) },
+                icon = { Icon(destination.icon, contentDescription = destination.label) },
+                label = { Text(destination.label) },
+            )
         }
     }
 }

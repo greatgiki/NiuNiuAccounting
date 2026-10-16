@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -26,7 +27,6 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -50,10 +50,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -66,6 +70,7 @@ import com.example.localledger.ui.common.DateTimeFormatters
 import com.example.localledger.ui.common.MoneyFormatter
 import com.example.localledger.ui.component.ConfirmDeleteDialog
 import com.example.localledger.ui.component.LoadingState
+import com.example.localledger.ui.component.SubmitGate
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -81,6 +86,8 @@ fun TransactionEditorScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    val deleteGate = remember { SubmitGate() }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         viewModel.effects.collect { effect ->
@@ -110,6 +117,23 @@ fun TransactionEditorScreen(
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
+        bottomBar = {
+            if (!state.isLoading && !state.input.notFound) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    AmountKeypad(onKey = viewModel::onAmountKey)
+                    Button(
+                        onClick = viewModel::save,
+                        enabled = state.canSave,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    ) {
+                        Text(if (state.input.saving) "保存中…" else "保存")
+                    }
+                }
+            }
+        },
     ) { padding ->
         when {
             state.isLoading -> Box(modifier = Modifier.padding(padding)) { LoadingState() }
@@ -131,11 +155,18 @@ fun TransactionEditorScreen(
         ConfirmDeleteDialog(
             title = "删除这条记录？",
             message = "删除后无法恢复，相关账户余额和统计会立即更新。",
+            confirmLabel = "删除",
+            submitting = deleteGate.submitting,
+            errorMessage = deleteGate.error,
             onConfirm = {
-                showDeleteConfirm = false
-                viewModel.delete()
+                deleteGate.launch(scope, { viewModel.delete() }) {
+                    showDeleteConfirm = false
+                }
             },
-            onDismiss = { showDeleteConfirm = false },
+            onDismiss = {
+                deleteGate.reset()
+                showDeleteConfirm = false
+            },
         )
     }
 }
@@ -201,9 +232,7 @@ private fun EditorContent(
             )
         }
 
-        AmountKeypad(onKey = viewModel::onAmountKey)
-
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(8.dp))
 
         if (input.type != TransactionType.TRANSFER) {
             Text("分类", style = MaterialTheme.typography.titleSmall)
@@ -278,11 +307,11 @@ private fun EditorContent(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(
                 onClick = { showDatePicker = true },
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
             ) {
                 Icon(
                     Icons.Default.DateRange,
-                    contentDescription = null,
+                    contentDescription = "选择日期",
                     modifier = Modifier.size(18.dp),
                 )
                 Spacer(Modifier.width(6.dp))
@@ -295,11 +324,11 @@ private fun EditorContent(
             }
             OutlinedButton(
                 onClick = { showTimePicker = true },
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
             ) {
                 Icon(
                     Icons.Default.AccessTime,
-                    contentDescription = null,
+                    contentDescription = "选择时间",
                     modifier = Modifier.size(18.dp),
                 )
                 Spacer(Modifier.width(6.dp))
@@ -320,16 +349,6 @@ private fun EditorContent(
         )
 
         Spacer(Modifier.height(16.dp))
-
-        Button(
-            onClick = viewModel::save,
-            enabled = state.canSave,
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-        ) {
-            Text(if (input.saving) "保存中…" else "保存")
-        }
-
-        Spacer(Modifier.height(32.dp))
     }
 
     if (showDatePicker) {
@@ -401,20 +420,21 @@ internal fun AmountKeypad(onKey: (String) -> Unit) {
         rows.forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 row.forEach { key ->
+                    val label = when (key) {
+                        "backspace" -> "⌫"
+                        else -> key
+                    }
                     Surface(
                         onClick = { onKey(key) },
                         shape = MaterialTheme.shapes.medium,
                         color = MaterialTheme.colorScheme.surfaceVariant,
-                        modifier = Modifier.weight(1f).height(52.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp)
+                            .semantics { contentDescription = amountKeyDescription(key) },
                     ) {
                         Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                when (key) {
-                                    "backspace" -> "⌫"
-                                    else -> key
-                                },
-                                style = MaterialTheme.typography.titleLarge,
-                            )
+                            Text(label, style = MaterialTheme.typography.titleLarge)
                         }
                     }
                 }
@@ -425,7 +445,10 @@ internal fun AmountKeypad(onKey: (String) -> Unit) {
                 onClick = { onKey("clear") },
                 shape = MaterialTheme.shapes.medium,
                 color = MaterialTheme.colorScheme.surfaceVariant,
-                modifier = Modifier.weight(1f).height(40.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 48.dp)
+                    .semantics { contentDescription = "清空金额" },
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Text("清空", style = MaterialTheme.typography.bodyMedium)
@@ -435,35 +458,80 @@ internal fun AmountKeypad(onKey: (String) -> Unit) {
     }
 }
 
+private fun amountKeyDescription(key: String): String = when (key) {
+    "backspace" -> "删除一位"
+    "." -> "小数点"
+    else -> "数字 $key"
+}
+
 @Composable
 private fun CategoryGrid(
     categories: List<com.example.localledger.domain.model.Category>,
     selectedId: String?,
     onSelect: (String) -> Unit,
 ) {
+    if (categories.isEmpty()) {
+        Text(
+            "没有可用分类",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(vertical = 8.dp),
+        )
+        return
+    }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         categories.chunked(4).forEach { rowItems ->
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 rowItems.forEach { category ->
-                    FilterChip(
-                        selected = category.id == selectedId,
+                    val selected = category.id == selectedId
+                    Surface(
                         onClick = { onSelect(category.id) },
-                        label = {
-                            Text(
-                                category.name,
-                                maxLines = 1,
-                                style = MaterialTheme.typography.bodySmall,
-                            )
+                        shape = MaterialTheme.shapes.medium,
+                        color = if (selected) {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant
                         },
-                        leadingIcon = {
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 64.dp)
+                            .semantics {
+                                contentDescription = if (selected) {
+                                    "已选分类 ${category.name}"
+                                } else {
+                                    "分类 ${category.name}"
+                                }
+                            },
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                        ) {
                             Icon(
                                 CategoryIcons.resolve(category.iconKey).image,
                                 contentDescription = null,
-                                modifier = Modifier.size(18.dp),
+                                modifier = Modifier.size(22.dp),
+                                tint = if (selected) {
+                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
                             )
-                        },
-                        modifier = Modifier.weight(1f),
-                    )
+                            Text(
+                                category.name,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (selected) {
+                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                },
+                            )
+                        }
+                    }
                 }
                 repeat(4 - rowItems.size) {
                     Spacer(Modifier.weight(1f))
@@ -487,7 +555,7 @@ private fun AccountSelector(
     Box(modifier = modifier) {
         OutlinedButton(
             onClick = { expanded = true },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
         ) {
             Text(
                 "$label：${selected?.name ?: "请选择"}",

@@ -3,7 +3,6 @@ package com.example.localledger.ui.detail
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.localledger.domain.error.LedgerException
 import com.example.localledger.domain.model.Account
 import com.example.localledger.domain.model.Category
 import com.example.localledger.domain.model.CategoryType
@@ -16,6 +15,8 @@ import com.example.localledger.domain.repository.TransactionRepository
 import com.example.localledger.domain.time.DateRangeResolver
 import com.example.localledger.domain.usecase.DeleteTransactionUseCase
 import com.example.localledger.ui.AppSession
+import com.example.localledger.ui.common.UiOutcome
+import com.example.localledger.ui.common.runOutcome
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
@@ -26,6 +27,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -63,6 +66,7 @@ data class TransactionListUiState(
     val categories: List<Category> = emptyList(),
     val accounts: List<Account> = emptyList(),
     val error: String? = null,
+    val canLoadMore: Boolean = false,
 )
 
 sealed interface TransactionListEffect {
@@ -96,6 +100,7 @@ class TransactionListViewModel @Inject constructor(
     )
     private val keywordFlow = MutableStateFlow("")
     private val refreshFlow = MutableStateFlow(0)
+    private val limitFlow = MutableStateFlow(PAGE_SIZE)
 
     private val effectChannel = Channel<TransactionListEffect>(Channel.BUFFERED)
     val effects = effectChannel.receiveAsFlow()
@@ -105,23 +110,26 @@ class TransactionListViewModel @Inject constructor(
         filterFlow,
         keywordFlow.debounce(300),
         refreshFlow,
-    ) { session, filter, keyword, _ ->
-        Triple(session.currentLedgerId, filter, keyword)
+        limitFlow,
+    ) { session, filter, keyword, _, limit ->
+        ListQuery(session.currentLedgerId, filter, keyword, limit)
     }
 
-    private val transactionsFlow = queryFlow.flatMapLatest { (ledgerId, filter, keyword) ->
+    private val transactionsFlow = queryFlow.flatMapLatest { query ->
+        val ledgerId = query.ledgerId
         if (ledgerId == null) {
             flowOf(Result.success(emptyList()))
         } else {
-            val range = resolveRange(filter)
+            val range = resolveRange(query.filter)
             transactionRepository.observeTransactions(
                 ledgerId,
                 TransactionFilter(
-                    type = filter.type,
-                    categoryId = filter.categoryId,
-                    accountId = filter.accountId,
+                    type = query.filter.type,
+                    categoryId = query.filter.categoryId,
+                    accountId = query.filter.accountId,
                     range = range,
-                    keyword = keyword,
+                    keyword = query.keyword,
+                    limit = query.limit + 1,
                 ),
             ).map { Result.success(it) }
                 .catch { error -> emit(Result.failure(error)) }
@@ -133,8 +141,13 @@ class TransactionListViewModel @Inject constructor(
         filterFlow,
         keywordFlow,
         refreshFlow,
-    ) { session, filter, keyword, _ -> Triple(session.currentLedgerId, filter, keyword) }
-        .flatMapLatest { (ledgerId, filter, keyword) ->
+        limitFlow,
+    ) { session, filter, keyword, _, limit -> ListQuery(session.currentLedgerId, filter, keyword, limit) }
+        .flatMapLatest { query ->
+            val ledgerId = query.ledgerId
+            val filter = query.filter
+            val keyword = query.keyword
+            val limit = query.limit
             if (ledgerId == null) {
                 flowOf(
                     TransactionListUiState(
@@ -152,13 +165,15 @@ class TransactionListViewModel @Inject constructor(
                 ) { transactions, expenseCategories, incomeCategories, accounts ->
                     transactions.fold(
                         onSuccess = { list ->
+                            val page = windowedPage(list, limit)
                             TransactionListUiState(
                                 isLoading = false,
-                                groups = groupByDate(list),
+                                groups = groupByDate(page.first),
                                 filter = filter,
                                 keyword = keyword,
                                 categories = expenseCategories + incomeCategories,
                                 accounts = accounts,
+                                canLoadMore = page.second,
                             )
                         },
                         onFailure = { error ->
@@ -177,6 +192,18 @@ class TransactionListViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TransactionListUiState())
 
+    init {
+        viewModelScope.launch {
+            combine(
+                appSession.state.map { it.currentLedgerId }.distinctUntilChanged(),
+                filterFlow,
+                keywordFlow.debounce(300),
+            ) { ledgerId, filter, keyword -> Triple(ledgerId, filter, keyword) }
+                .drop(1)
+                .collect { limitFlow.value = PAGE_SIZE }
+        }
+    }
+
     fun onKeywordChange(keyword: String) {
         keywordFlow.value = keyword.take(100)
     }
@@ -194,17 +221,14 @@ class TransactionListViewModel @Inject constructor(
         refreshFlow.value += 1
     }
 
-    fun deleteTransaction(transactionId: String) {
-        val ledgerId = appSession.state.value.currentLedgerId ?: return
-        viewModelScope.launch {
-            try {
-                deleteTransactionUseCase(ledgerId, transactionId)
-            } catch (error: LedgerException) {
-                effectChannel.send(
-                    TransactionListEffect.ShowMessage(error.message ?: "删除失败"),
-                )
-            }
-        }
+    fun loadMore() {
+        limitFlow.update { it + PAGE_SIZE }
+    }
+
+    suspend fun deleteTransaction(transactionId: String): UiOutcome {
+        val ledgerId = appSession.state.value.currentLedgerId
+            ?: return UiOutcome.Failure("请先选择账本")
+        return runOutcome("删除失败") { deleteTransactionUseCase(ledgerId, transactionId) }
     }
 
     private fun resolveRange(filter: TransactionListFilter) =
@@ -214,4 +238,20 @@ class TransactionListViewModel @Inject constructor(
         list.groupBy { detail ->
             Instant.ofEpochMilli(detail.transaction.transactionAt).atZone(zoneId).toLocalDate()
         }.map { (date, items) -> TransactionDayGroup(date, items) }
+
+    private companion object {
+        const val PAGE_SIZE = 50
+    }
+}
+
+private data class ListQuery(
+    val ledgerId: String?,
+    val filter: TransactionListFilter,
+    val keyword: String,
+    val limit: Int,
+)
+
+internal fun <T> windowedPage(items: List<T>, limit: Int): Pair<List<T>, Boolean> {
+    val visible = items.take(limit)
+    return visible to (items.size > limit)
 }
