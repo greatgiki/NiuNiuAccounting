@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -36,6 +37,7 @@ import androidx.navigation.NavHostController
 import com.example.localledger.core.storage.ThemeMode
 import com.example.localledger.domain.model.CategoryType
 import com.example.localledger.ui.AppSession
+import com.example.localledger.ui.component.SubmitGate
 import com.example.localledger.ui.home.SectionTitle
 import com.example.localledger.ui.navigation.Routes
 import kotlinx.coroutines.launch
@@ -81,8 +83,9 @@ fun SettingsScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .heightIn(min = 48.dp)
                         .clickable { scope.launch { appSession.setTheme(mode) } }
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     RadioButton(
@@ -130,6 +133,8 @@ private fun ExchangeRateSection(viewModel: ExchangeRateViewModel = hiltViewModel
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var message by remember { mutableStateOf<String?>(null) }
     var confirmRevalue by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val revalueGate = remember { SubmitGate() }
     LaunchedEffect(Unit) {
         viewModel.effects.collect { message = it }
     }
@@ -159,17 +164,30 @@ private fun ExchangeRateSection(viewModel: ExchangeRateViewModel = hiltViewModel
             if (message != null) {
                 Text(message ?: "", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
             }
-            TextButton(onClick = viewModel::refresh) { Text("刷新汇率") }
-            TextButton(onClick = { confirmRevalue = true }) { Text("按当前汇率重算历史") }
+            TextButton(onClick = viewModel::refresh, enabled = !state.refreshing) {
+                Text(if (state.refreshing) "刷新中…" else "刷新汇率")
+            }
+            TextButton(onClick = {
+                revalueGate.reset()
+                confirmRevalue = true
+            }) { Text("按当前汇率重算历史") }
         }
     }
     if (confirmRevalue) {
         RevalueConfirmDialog(
+            submitting = revalueGate.submitting,
+            errorMessage = revalueGate.error,
             onConfirm = {
-                confirmRevalue = false
-                viewModel.revalueWithCurrentRates()
+                revalueGate.launch(scope, { viewModel.revalueWithCurrentRates() }) {
+                    confirmRevalue = false
+                }
             },
-            onDismiss = { confirmRevalue = false },
+            onDismiss = {
+                if (!revalueGate.submitting) {
+                    revalueGate.reset()
+                    confirmRevalue = false
+                }
+            },
         )
     }
 }
@@ -178,18 +196,32 @@ private fun ExchangeRateSection(viewModel: ExchangeRateViewModel = hiltViewModel
 internal fun RevalueConfirmDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
+    submitting: Boolean = false,
+    errorMessage: String? = null,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("按当前汇率重算？") },
         text = {
-            Text("将用当前缓存汇率重算本账本全部流水的本位币金额，不按各笔流水的日期挑选历史汇率。此操作不可撤销。")
+            Column {
+                Text("将用当前缓存汇率重算本账本全部流水的本位币金额，不按各笔流水的日期挑选历史汇率。此操作不可撤销。")
+                if (!errorMessage.isNullOrBlank()) {
+                    Text(
+                        errorMessage,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+            }
         },
         confirmButton = {
-            TextButton(onClick = onConfirm) { Text("重算") }
+            TextButton(onClick = { if (!submitting) onConfirm() }, enabled = !submitting) {
+                Text(if (submitting) "重算中…" else "重算")
+            }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(onClick = onDismiss, enabled = !submitting) { Text("取消") }
         },
     )
 }
@@ -199,14 +231,15 @@ private fun SettingsEntry(label: String, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = 48.dp)
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Icon(
             Icons.AutoMirrored.Filled.KeyboardArrowRight,
-            contentDescription = null,
+            contentDescription = "进入$label",
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }

@@ -1,7 +1,7 @@
 package com.example.localledger.ui.detail
 
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -16,6 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
@@ -33,12 +35,16 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -51,6 +57,8 @@ import com.example.localledger.ui.component.ConfirmDeleteDialog
 import com.example.localledger.ui.component.EmptyState
 import com.example.localledger.ui.component.ErrorState
 import com.example.localledger.ui.component.LoadingState
+import com.example.localledger.ui.component.SubmitGate
+import com.example.localledger.ui.component.SwipeToDeleteRow
 import com.example.localledger.ui.component.TransactionRowContent
 import com.example.localledger.ui.home.transactionSubtitle
 import com.example.localledger.ui.home.transactionTitle
@@ -71,6 +79,11 @@ fun TransactionListScreen(
     var showFilterSheet by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<String?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
+    val deleteGate = remember { SubmitGate() }
+    val scope = rememberCoroutineScope()
+    val hasFilter by remember {
+        derivedStateOf { !state.filter.isEmpty || state.keyword.isNotBlank() }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.effects.collect { effect ->
@@ -89,8 +102,11 @@ fun TransactionListScreen(
                 value = state.keyword,
                 onValueChange = viewModel::onKeywordChange,
                 placeholder = { Text("搜索备注") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 singleLine = true,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .semantics { contentDescription = "搜索备注" },
             )
             IconButton(onClick = { showFilterSheet = true }) {
                 Icon(Icons.Default.FilterList, contentDescription = "筛选")
@@ -98,7 +114,6 @@ fun TransactionListScreen(
         }
 
         val filter = state.filter
-        val hasFilter = !filter.isEmpty || state.keyword.isNotBlank()
         if (hasFilter) {
             Row(
                 modifier = Modifier
@@ -142,39 +157,56 @@ fun TransactionListScreen(
             )
             else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
                 state.groups.forEach { group ->
-                    stickyHeader(key = "header-${group.date}") {
+                    stickyHeader(key = "header-${group.date}", contentType = "day-header") {
                         Text(
                             DateTimeFormatters.groupHeader(group.date),
                             style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.background)
                                 .padding(vertical = 8.dp),
                         )
                     }
-                    items(group.items, key = { it.transaction.id }) { detail ->
-                        TransactionRowContent(
-                            title = transactionTitle(detail),
-                            subtitle = transactionSubtitle(detail, session.currentLedgerCurrency),
-                            amountMinor = detail.transaction.amountMinor,
-                            currencyCode = detail.accountCurrencyCode,
-                            type = detail.transaction.type,
-                            timeMillis = detail.transaction.transactionAt,
-                            zoneId = ZoneId.systemDefault(),
-                            iconKey = detail.categoryIconKey,
-                            modifier = Modifier.combinedClickable(
-                                onClick = {
-                                    navController.navigate(
-                                        Routes.transactionEdit(detail.transaction.id),
-                                    )
-                                },
-                                onLongClick = { deleteTarget = detail.transaction.id },
-                            ),
-                        )
+                    items(
+                        group.items,
+                        key = { it.transaction.id },
+                        contentType = { "transaction" },
+                    ) { detail ->
+                        SwipeToDeleteRow(
+                            onDeleteRequest = { deleteTarget = detail.transaction.id },
+                        ) {
+                            TransactionRowContent(
+                                title = transactionTitle(detail),
+                                subtitle = transactionSubtitle(detail, session.currentLedgerCurrency),
+                                amountMinor = detail.transaction.amountMinor,
+                                currencyCode = detail.accountCurrencyCode,
+                                type = detail.transaction.type,
+                                timeMillis = detail.transaction.transactionAt,
+                                zoneId = ZoneId.systemDefault(),
+                                iconKey = detail.categoryIconKey,
+                                modifier = Modifier.combinedClickable(
+                                    onClick = {
+                                        navController.navigate(
+                                            Routes.transactionEdit(detail.transaction.id),
+                                        )
+                                    },
+                                    onLongClick = { deleteTarget = detail.transaction.id },
+                                ),
+                            )
+                        }
                         HorizontalDivider()
                     }
                 }
-                item { Spacer(Modifier.height(96.dp)) }
+                if (state.canLoadMore) {
+                    item(key = "load-more", contentType = "load-more") {
+                        TextButton(
+                            onClick = viewModel::loadMore,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                        ) { Text("加载更多") }
+                    }
+                }
+                item(key = "bottom-space") { Spacer(Modifier.height(24.dp)) }
             }
         }
     }
@@ -194,11 +226,18 @@ fun TransactionListScreen(
         ConfirmDeleteDialog(
             title = "删除这条记录？",
             message = "删除后无法恢复，相关账户余额和统计会立即更新。",
+            confirmLabel = "删除",
+            submitting = deleteGate.submitting,
+            errorMessage = deleteGate.error,
             onConfirm = {
-                deleteTarget = null
-                viewModel.deleteTransaction(targetId)
+                deleteGate.launch(scope, { viewModel.deleteTransaction(targetId) }) {
+                    deleteTarget = null
+                }
             },
-            onDismiss = { deleteTarget = null },
+            onDismiss = {
+                deleteGate.reset()
+                deleteTarget = null
+            },
         )
     }
 

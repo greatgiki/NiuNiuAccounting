@@ -15,6 +15,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -34,6 +35,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,9 +49,12 @@ import com.example.localledger.domain.model.Budget
 import com.example.localledger.domain.money.CurrencyCatalog
 import com.example.localledger.ui.common.DateTimeFormatters
 import com.example.localledger.ui.common.MoneyFormatter
+import com.example.localledger.ui.common.UiOutcome
+import com.example.localledger.ui.component.ConfirmDeleteDialog
 import com.example.localledger.ui.component.EmptyState
 import com.example.localledger.ui.component.ErrorState
 import com.example.localledger.ui.component.LoadingState
+import com.example.localledger.ui.component.SubmitGate
 import com.example.localledger.ui.home.BudgetProgressRow
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -61,6 +66,10 @@ fun BudgetManageScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     var editor by remember { mutableStateOf<BudgetEditor?>(null) }
+    var deleteTarget by remember { mutableStateOf<Pair<String, String>?>(null) }
+    val scope = rememberCoroutineScope()
+    val saveGate = remember { SubmitGate() }
+    val deleteGate = remember { SubmitGate() }
 
     LaunchedEffect(Unit) {
         viewModel.effects.collect { effect ->
@@ -83,7 +92,10 @@ fun BudgetManageScreen(
         },
         snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = {
-            FloatingActionButton(onClick = { editor = BudgetEditor(null, null) }) {
+            FloatingActionButton(onClick = {
+                saveGate.reset()
+                editor = BudgetEditor(null, null)
+            }) {
                 Icon(Icons.Default.Add, contentDescription = "新建预算")
             }
         },
@@ -94,7 +106,7 @@ fun BudgetManageScreen(
             else -> LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
             ) {
-                item {
+                item(key = "month") {
                     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = viewModel::previousMonth) {
                             Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "上一月")
@@ -113,26 +125,27 @@ fun BudgetManageScreen(
                     )
                 }
                 if (state.lines.isEmpty()) {
-                    item { EmptyState("这个月还没有预算") }
+                    item(key = "empty") { EmptyState("这个月还没有预算") }
                 }
-                items(state.lines, key = { it.id }) { line ->
+                items(state.lines, key = { it.id }, contentType = { "budget" }) { line ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(modifier = Modifier.weight(1f)) {
                             BudgetProgressRow(line, state.currencyCode)
                         }
                         IconButton(onClick = {
+                            saveGate.reset()
                             val budget = state.budgets.first { it.id == line.id }
                             editor = BudgetEditor(budget, budget.categoryId)
                         }) {
-                            Icon(Icons.Default.Add, contentDescription = "编辑${line.label}")
+                            Icon(Icons.Default.Edit, contentDescription = "编辑${line.label}")
                         }
-                        IconButton(onClick = { viewModel.delete(line.id) }) {
+                        IconButton(onClick = { deleteTarget = line.id to line.label }) {
                             Icon(Icons.Default.Delete, contentDescription = "删除${line.label}")
                         }
                     }
                     HorizontalDivider()
                 }
-                item { Spacer(Modifier.height(96.dp)) }
+                item(key = "bottom-space") { Spacer(Modifier.height(24.dp)) }
             }
         }
     }
@@ -142,7 +155,14 @@ fun BudgetManageScreen(
             target = target,
             categories = state.categories,
             currencyCode = state.currencyCode,
-            onDismiss = { editor = null },
+            submitting = saveGate.submitting,
+            errorMessage = saveGate.error,
+            onDismiss = {
+                if (!saveGate.submitting) {
+                    saveGate.reset()
+                    editor = null
+                }
+            },
             onConfirm = { categoryId, amountText ->
                 val digits = CurrencyCatalog.of(state.currencyCode).minorDigits
                 val amount = try {
@@ -150,9 +170,32 @@ fun BudgetManageScreen(
                 } catch (error: LedgerException) {
                     null
                 }
-                if (amount == null) return@BudgetEditDialog
-                viewModel.save(target.existing, categoryId, amount)
-                editor = null
+                if (amount == null) {
+                    saveGate.launch(scope, { UiOutcome.Failure("金额格式不正确") }) {}
+                    return@BudgetEditDialog
+                }
+                saveGate.launch(scope, { viewModel.save(target.existing, categoryId, amount) }) {
+                    editor = null
+                }
+            },
+        )
+    }
+
+    deleteTarget?.let { (budgetId, label) ->
+        ConfirmDeleteDialog(
+            title = "删除「$label」预算？",
+            message = "删除后无法恢复。",
+            confirmLabel = "删除",
+            submitting = deleteGate.submitting,
+            errorMessage = deleteGate.error,
+            onConfirm = {
+                deleteGate.launch(scope, { viewModel.delete(budgetId) }) {
+                    deleteTarget = null
+                }
+            },
+            onDismiss = {
+                deleteGate.reset()
+                deleteTarget = null
             },
         )
     }
@@ -167,6 +210,8 @@ internal fun BudgetEditDialog(
     currencyCode: String,
     onDismiss: () -> Unit,
     onConfirm: (String?, String) -> Unit,
+    submitting: Boolean = false,
+    errorMessage: String? = null,
 ) {
     var total by remember { mutableStateOf(target.categoryId == null) }
     var categoryId by remember { mutableStateOf(target.categoryId ?: categories.firstOrNull()?.id) }
@@ -194,15 +239,26 @@ internal fun BudgetEditDialog(
                     onValueChange = { amount = it },
                     label = { Text("预算金额") },
                     singleLine = true,
+                    enabled = !submitting,
                 )
+                if (!errorMessage.isNullOrBlank()) {
+                    Text(
+                        errorMessage,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
             }
         },
         confirmButton = {
             TextButton(
-                onClick = { onConfirm(if (total) null else categoryId, amount) },
-                enabled = amount.isNotBlank() && (total || categoryId != null),
-            ) { Text("保存") }
+                onClick = {
+                    if (!submitting) onConfirm(if (total) null else categoryId, amount)
+                },
+                enabled = !submitting && amount.isNotBlank() && (total || categoryId != null),
+            ) { Text(if (submitting) "保存中…" else "保存") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !submitting) { Text("取消") } },
     )
 }
