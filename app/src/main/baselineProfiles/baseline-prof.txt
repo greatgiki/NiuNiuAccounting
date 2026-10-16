@@ -1,0 +1,33 @@
+# Baseline profile for cold start, top-level tabs, and 记一笔.
+# Method rules carry HSP (hot / startup / post-startup). Class rules cannot.
+# Release installs this through androidx.profileinstaller. Debug builds are not
+# R8-optimized and do not get the same compiled speed profile.
+
+HSPLcom/example/localledger/MainActivity;-><init>()V
+HSPLcom/example/localledger/MainActivity;->onCreate(Landroid/os/Bundle;)V
+HSPLcom/example/localledger/MainActivity;->onNewIntent(Landroid/content/Intent;)V
+HSPLcom/example/localledger/LocalLedgerApplication;-><init>()V
+HSPLcom/example/localledger/LocalLedgerApplication;->onCreate()V
+HSPLcom/example/localledger/ui/editor/TransactionEditorViewModel;-><init>(Landroidx/lifecycle/SavedStateHandle;Lcom/example/localledger/ui/AppSession;Lcom/example/localledger/ui/editor/EditorCatalog;Lcom/example/localledger/domain/repository/TransactionRepository;Lcom/example/localledger/domain/usecase/SaveIncomeExpenseUseCase;Lcom/example/localledger/domain/usecase/SaveTransferUseCase;Lcom/example/localledger/domain/usecase/DeleteTransactionUseCase;Lcom/example/localledger/domain/time/DateRangeResolver;)V
+HSPLcom/example/localledger/ui/editor/EditorCatalog;-><init>(Lcom/example/localledger/ui/AppSession;Lcom/example/localledger/domain/repository/AccountRepository;Lcom/example/localledger/domain/repository/CategoryRepository;Lkotlinx/coroutines/CoroutineScope;)V
+HSPLcom/example/localledger/ui/editor/EditorCatalog;->warm()V
+HSPLcom/example/localledger/ui/common/CategoryIcons;->prewarm()V
+HSPLcom/example/localledger/ui/common/CategoryIcons;->resolve(Ljava/lang/String;)Lcom/example/localledger/ui/common/CategoryIcon;
+HSPLcom/example/localledger/data/local/database/DatabaseProvider;->get(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+
+Lcom/example/localledger/MainActivity;
+Lcom/example/localledger/LocalLedgerApplication;
+Lcom/example/localledger/ui/navigation/AppNavHostKt;
+Lcom/example/localledger/ui/navigation/PagerGestureKt;
+Lcom/example/localledger/ui/home/HomeScreenKt;
+Lcom/example/localledger/ui/home/HomeViewModel;
+Lcom/example/localledger/ui/detail/TransactionListScreenKt;
+Lcom/example/localledger/ui/detail/TransactionListViewModel;
+Lcom/example/localledger/ui/statistics/StatisticsScreenKt;
+Lcom/example/localledger/ui/statistics/StatisticsViewModel;
+Lcom/example/localledger/ui/settings/SettingsScreenKt;
+Lcom/example/localledger/ui/editor/TransactionEditorScreenKt;
+Lcom/example/localledger/ui/editor/TransactionEditorViewModel;
+Lcom/example/localledger/ui/editor/EditorCatalog;
+Lcom/example/localledger/ui/common/CategoryIcons;
+Lcom/example/localledger/data/local/database/DatabaseProvider;

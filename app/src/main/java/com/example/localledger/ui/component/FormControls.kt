@@ -19,6 +19,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -102,13 +103,16 @@ fun CategoryIconGrid(
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val rows = remember(categories) { categories.chunked(4) }
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        categories.chunked(4).forEach { rowItems ->
+        rows.forEach { rowItems ->
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 rowItems.forEach { category ->
+                    key(category.id) {
+                    val icon = remember(category.iconKey) { CategoryIcons.resolve(category.iconKey).image }
                     FilterChip(
                         selected = category.id == selectedId,
                         onClick = { onSelect(category.id) },
@@ -121,13 +125,14 @@ fun CategoryIconGrid(
                         },
                         leadingIcon = {
                             Icon(
-                                CategoryIcons.resolve(category.iconKey).image,
+                                icon,
                                 contentDescription = null,
                                 modifier = Modifier.size(18.dp),
                             )
                         },
                         modifier = Modifier.weight(1f),
                     )
+                    }
                 }
                 repeat(4 - rowItems.size) {
                     Spacer(Modifier.weight(1f))

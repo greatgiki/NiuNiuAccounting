@@ -66,6 +66,7 @@ import com.example.localledger.ui.home.transactionSubtitle
 import com.example.localledger.ui.home.transactionTitle
 import com.example.localledger.ui.importing.PendingDraftBanner
 import com.example.localledger.ui.navigation.Routes
+import com.example.localledger.ui.navigation.claimPagerHorizontalGesture
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -122,6 +123,7 @@ fun TransactionListScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .claimPagerHorizontalGesture()
                     .horizontalScroll(rememberScrollState())
                     .padding(vertical = 4.dp),
             ) {
@@ -369,7 +371,7 @@ private fun FilterSheet(
                         else -> true
                     }
                 }
-                Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                Row(modifier = Modifier.claimPagerHorizontalGesture().horizontalScroll(rememberScrollState())) {
                     FilterChip(
                         selected = categoryId == null,
                         onClick = { categoryId = null },
@@ -389,7 +391,7 @@ private fun FilterSheet(
 
             Spacer(Modifier.height(8.dp))
             Text("账户", style = MaterialTheme.typography.titleSmall)
-            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+            Row(modifier = Modifier.claimPagerHorizontalGesture().horizontalScroll(rememberScrollState())) {
                 FilterChip(
                     selected = accountId == null,
                     onClick = { accountId = null },

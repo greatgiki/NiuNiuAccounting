@@ -2,15 +2,20 @@ package com.example.localledger
 
 import android.app.Application
 import com.example.localledger.core.storage.BackendInitializer
+import com.example.localledger.ui.common.CategoryIcons
+import com.example.localledger.ui.editor.EditorCatalog
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 
 @HiltAndroidApp
 class LocalLedgerApplication : Application() {
     @Inject lateinit var backendInitializer: BackendInitializer
+    @Inject lateinit var editorCatalog: EditorCatalog
 
     override fun onCreate() {
         super.onCreate()
         backendInitializer.start()
+        editorCatalog.warm()
+        CategoryIcons.prewarm()
     }
 }
