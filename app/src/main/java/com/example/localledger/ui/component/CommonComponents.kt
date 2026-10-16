@@ -1,6 +1,8 @@
 package com.example.localledger.ui.component
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -8,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Delete
@@ -21,6 +24,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
@@ -30,6 +34,7 @@ import com.example.localledger.domain.model.TransactionType
 import com.example.localledger.ui.common.CategoryIcons
 import com.example.localledger.ui.common.DateTimeFormatters
 import com.example.localledger.ui.common.MoneyFormatter
+import com.example.localledger.ui.common.categoryAccent
 import com.example.localledger.ui.theme.amountColor
 import java.time.ZoneId
 
@@ -209,20 +214,29 @@ fun TransactionRowContent(
     modifier: Modifier = Modifier,
     currencyCode: String = "CNY",
 ) {
+    val accent = categoryAccent(iconKey, type)
     Row(
         modifier = modifier.fillMaxWidth().padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(
-            imageVector = if (type == TransactionType.TRANSFER) {
-                Icons.AutoMirrored.Filled.ArrowForward
-            } else {
-                CategoryIcons.resolve(iconKey).image
-            },
-            contentDescription = title,
-            modifier = Modifier.size(28.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(accent.copy(alpha = 0.16f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = if (type == TransactionType.TRANSFER) {
+                    Icons.AutoMirrored.Filled.ArrowForward
+                } else {
+                    CategoryIcons.resolve(iconKey).image
+                },
+                contentDescription = title,
+                modifier = Modifier.size(22.dp),
+                tint = accent,
+            )
+        }
         Spacer(Modifier.size(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyLarge, maxLines = 1)

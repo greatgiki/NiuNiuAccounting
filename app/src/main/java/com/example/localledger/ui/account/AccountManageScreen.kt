@@ -1,5 +1,6 @@
 package com.example.localledger.ui.account
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,8 +14,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AccountBalance
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CreditCard
+import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Payments
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -50,6 +57,7 @@ import com.example.localledger.ui.AppSession
 import com.example.localledger.domain.money.CurrencyCatalog
 import com.example.localledger.ui.common.CurrencyChips
 import com.example.localledger.ui.common.MoneyFormatter
+import com.example.localledger.ui.component.AmountField
 import com.example.localledger.ui.component.ConfirmDeleteDialog
 import com.example.localledger.ui.component.EmptyState
 import com.example.localledger.ui.component.ErrorState
@@ -63,6 +71,14 @@ fun accountTypeLabel(type: AccountType): String = when (type) {
     AccountType.E_WALLET -> "电子钱包"
     AccountType.CREDIT_CARD -> "信用卡"
     AccountType.OTHER -> "其他"
+}
+
+fun accountTypeIcon(type: AccountType): ImageVector = when (type) {
+    AccountType.CASH -> Icons.Default.Payments
+    AccountType.BANK_CARD -> Icons.Default.AccountBalance
+    AccountType.E_WALLET -> Icons.Default.AccountBalanceWallet
+    AccountType.CREDIT_CARD -> Icons.Default.CreditCard
+    AccountType.OTHER -> Icons.Default.MoreHoriz
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -108,8 +124,10 @@ fun AccountManageScreen(
         },
     ) { padding ->
         when {
-            state.isLoading -> LoadingState()
-            state.error != null -> ErrorState(state.error ?: "读取账户失败", onRetry = viewModel::retry)
+            state.isLoading -> Box(Modifier.fillMaxSize().padding(padding)) { LoadingState() }
+            state.error != null -> Box(Modifier.fillMaxSize().padding(padding)) {
+                ErrorState(state.error ?: "读取账户失败", onRetry = viewModel::retry)
+            }
             else -> LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
             ) {
@@ -118,6 +136,7 @@ fun AccountManageScreen(
                 }
                 items(active, key = { it.account.id }) { balance ->
                     AccountRow(
+                        modifier = Modifier.animateItem(),
                         name = balance.account.name,
                         type = balance.account.type,
                         balanceMinor = balance.balanceMinor,
@@ -194,10 +213,11 @@ private fun AccountRow(
     currencyCode: String,
     onEdit: () -> Unit,
     onArchive: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+        modifier = modifier.fillMaxWidth().padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
@@ -278,11 +298,11 @@ private fun AccountEditDialog(
                     )
                 }
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
+                AmountField(
                     value = balanceText,
                     onValueChange = { balanceText = it },
-                    label = { Text("初始余额（可为负数）") },
-                    singleLine = true,
+                    label = "初始余额（可为负数）",
+                    currencyCode = currency,
                 )
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
