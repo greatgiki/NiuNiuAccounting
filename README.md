@@ -27,7 +27,9 @@
 - 账户各自有 `currency_code`。账户余额和流水上的 `amount_minor` 使用该账户的最小货币单位。
 - 收入和支出在保存时折算成 `base_amount_minor`，并记下当时的 `fx_rate`（1 单位账户货币兑换多少本位币）。之后汇率变化不会改写已经入账的汇总。
 - 转账同时保存转出金额 `amount_minor` 和转入金额 `to_amount_minor`。两边账户余额分别使用各自金额，因此可以表示不同币种，也可以手工填写实际到账金额。未填写转入金额时，按缓存汇率计算。同币种转账的两边金额相同。
-- 汇率优先请求 [Frankfurter](https://www.frankfurter.app/)（欧洲央行，无需密钥）：`https://api.frankfurter.app/latest?from={本位币}`。失败时改用 `https://open.er-api.com/v6/latest/{本位币}`。结果写入 `exchange_rate_snapshots`，设置页显示更新时间。Frankfurter 不含的币种（例如新台币）依赖备用接口。
+- 汇率优先读取中国外汇交易中心（人民银行授权发布）的人民币汇率中间价，无需密钥：`https://www.chinamoney.com.cn/r/cms/www/chinamoney/data/fx/ccpr.json`。该文件给出最近一个工作日约 9:15（北京时间）的中间价。若这个文件不可用，改读同站 `CcprHisNew` 的最新一条，并按当天 9:15（北京时间）计。
+- 中间价以人民币为标价。`USD/CNY` 是 1 外币兑人民币，`100JPY/CNY` 是 100 外币兑人民币，`CNY/KRW` 是 1 人民币兑外币。换算到账本本位币时，先统一成「1 人民币兑多少外币」，再做交叉：`报价 = 外币对人民币 / 本位币对人民币`。本位币不是人民币时同样走这条交叉，不改历史流水。
+- 交易中心目前公布美元、欧元、日元、港币、英镑、澳元、加元、新加坡元、瑞士法郎、韩元等，不含新台币。缺的币种用 jsDelivr 上的 [currency-api](https://github.com/fawazahmed0/currency-api) 补齐（`cdn.jsdelivr.net`，大陆一般可访问）。仍缺或中间价整体失败时，再试 Frankfurter（`api.frankfurter.dev`）和 `open.er-api.com`。结果写入 `exchange_rate_snapshots`。设置页显示来源和北京时间的发布时间；刷新失败时继续用上次缓存。
 
 ## 数据库
 

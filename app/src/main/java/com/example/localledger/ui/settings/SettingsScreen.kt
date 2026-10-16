@@ -111,8 +111,8 @@ fun SettingsScreen(
                 Spacer(Modifier.height(8.dp))
                 Text(
                     "账本、账户和流水只保存在本机，不会上传。\n" +
-                        "刷新汇率时会访问 Frankfurter（欧洲央行）或 open.er-api.com，只发送币种代码，不发送账本内容。\n" +
-                        "没有网络时继续使用上次缓存的汇率。\n" +
+                        "刷新汇率时优先读取中国外汇交易中心公布的人民币汇率中间价，只获取公开汇率，不发送账本内容。\n" +
+                        "中间价未公布的币种再向其他公开接口补齐。没有网络时继续使用上次缓存的汇率。\n" +
                         "卸载应用、清除应用数据或恢复出厂设置后，账本数据将被删除且无法恢复。\n" +
                         "当前版本不支持备份与恢复。",
                     style = MaterialTheme.typography.bodyMedium,
@@ -137,10 +137,17 @@ private fun ExchangeRateSection(viewModel: ExchangeRateViewModel = hiltViewModel
             Text("本位币 ${state.currencyCode}", style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(4.dp))
             Text(
-                listOf(state.updatedText, state.source).filter { it.isNotBlank() }.joinToString(" · "),
+                state.updatedText,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            if (state.source.isNotBlank()) {
+                Text(
+                    "来源 ${state.source}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Text(
                 "外币流水按保存时的汇率折算进本位币，之后汇率变化不会改写已入账金额。",
                 style = MaterialTheme.typography.bodySmall,

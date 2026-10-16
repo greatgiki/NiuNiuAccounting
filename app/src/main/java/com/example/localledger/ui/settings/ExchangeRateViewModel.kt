@@ -3,8 +3,8 @@ package com.example.localledger.ui.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.localledger.domain.model.ExchangeRateSnapshot
+import com.example.localledger.domain.money.CfetsCcpr
 import com.example.localledger.domain.repository.ExchangeRateRepository
-import com.example.localledger.domain.time.ZoneIdProvider
 import com.example.localledger.domain.usecase.RefreshExchangeRateResult
 import com.example.localledger.domain.usecase.RefreshExchangeRatesUseCase
 import com.example.localledger.ui.AppSession
@@ -34,9 +34,8 @@ class ExchangeRateViewModel @Inject constructor(
     appSession: AppSession,
     repository: ExchangeRateRepository,
     private val refreshRates: RefreshExchangeRatesUseCase,
-    zoneIdProvider: ZoneIdProvider,
 ) : ViewModel() {
-    private val zone = zoneIdProvider.current()
+    private val beijing = CfetsCcpr.BEIJING
     private val messages = Channel<String>(Channel.BUFFERED)
     val effects = messages.receiveAsFlow()
 
@@ -66,10 +65,11 @@ class ExchangeRateViewModel @Inject constructor(
         if (this == null) return ExchangeRateUiState(currencyCode = currency)
         return ExchangeRateUiState(
             currencyCode = currency,
-            updatedText = "更新于 ${DateTimeFormatters.dateTime(fetchedAt, zone)}",
+            updatedText = "发布时间 ${DateTimeFormatters.dateTime(fetchedAt, beijing)}（北京时间）",
             source = source,
         )
     }
 
-    private fun ExchangeRateSnapshot.updatedLabel(): String = DateTimeFormatters.dateTime(fetchedAt, zone)
+    private fun ExchangeRateSnapshot.updatedLabel(): String =
+        "${DateTimeFormatters.dateTime(fetchedAt, beijing)}（北京时间）"
 }
