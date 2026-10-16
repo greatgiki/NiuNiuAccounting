@@ -6,7 +6,7 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 
 /**
- * 汇率表的语义与 Frankfurter 一致：`quotesPerUnit[C]` 表示 1 单位本位币可兑换的 C 数量。
+ * `quotesPerUnit[C]` 表示 1 单位本位币可兑换的 C 数量。
  * 例如本位币 CNY、USD = 0.14，即 1 CNY = 0.14 USD。
  */
 object CurrencyConverter {

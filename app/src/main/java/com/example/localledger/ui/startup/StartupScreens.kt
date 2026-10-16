@@ -71,7 +71,7 @@ fun DataLossNoticeScreen(onAcknowledge: () -> Unit) {
         Spacer(Modifier.height(16.dp))
         Text(
             "账本数据保存在本机，不会上传。\n\n" +
-                "仅在刷新汇率时联网，请求公开汇率，不包含你的账本内容。没有网络时使用上次缓存的汇率。\n\n" +
+                "仅在刷新汇率时联网，优先读取中国外汇交易中心的人民币汇率中间价，不包含你的账本内容。没有网络时使用上次缓存的汇率。\n\n" +
                 "卸载应用、清除应用数据或恢复出厂设置后，账本数据将被删除且无法恢复。",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,

@@ -179,7 +179,7 @@ data class RecurringRule(
 
 data class ExchangeRateSnapshot(
     val baseCode: String,
-    /** 1 单位本位币可兑换的报价币数量，与 Frankfurter `from=base` 的 rates 一致。 */
+    /** 1 单位本位币可兑换的报价币数量。人民币中间价会先按人民币交叉换算成这个口径。 */
     val quotesPerUnit: Map<String, BigDecimal>,
     val fetchedAt: Long,
     val source: String,
