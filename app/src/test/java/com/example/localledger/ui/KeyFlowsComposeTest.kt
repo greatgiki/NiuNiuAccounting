@@ -44,7 +44,7 @@ import com.example.localledger.ui.editor.AmountKeypad
 import com.example.localledger.ui.home.BudgetProgressRow
 import com.example.localledger.ui.home.HomeBudgetLine
 import com.example.localledger.ui.navigation.LedgerBottomBar
-import com.example.localledger.ui.navigation.Routes
+import com.example.localledger.ui.navigation.TopLevelPage
 import com.example.localledger.ui.recurring.DeleteRuleDialog
 import com.example.localledger.ui.recurring.RecurringUiState
 import com.example.localledger.ui.recurring.ResumeRuleDialog
@@ -429,8 +429,8 @@ class KeyFlowsComposeTest {
         compose.setContent {
             LocalLedgerTheme {
                 LedgerBottomBar(
-                    currentRoute = Routes.HOME,
-                    onNavigate = {},
+                    selectedPage = TopLevelPage.Home,
+                    onSelect = {},
                     onCreate = { created = true },
                 )
             }

@@ -44,11 +44,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import com.example.localledger.BuildConfig
+import com.example.localledger.R
 import com.example.localledger.core.storage.ThemeMode
 import com.example.localledger.domain.model.CategoryType
 import com.example.localledger.ui.AppSession
@@ -158,7 +160,7 @@ fun SettingsScreen(
                     tint = MaterialTheme.colorScheme.primary,
                 )
                 Spacer(Modifier.size(12.dp))
-                Text("关于", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                Text(stringResource(R.string.app_name), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                 Text(
                     "版本 ${BuildConfig.VERSION_NAME}",
                     style = MaterialTheme.typography.bodyMedium,
