@@ -7,12 +7,9 @@ import com.example.localledger.core.money.MoneyParser
 import com.example.localledger.domain.error.LedgerException
 import com.example.localledger.domain.model.Account
 import com.example.localledger.domain.model.Category
-import com.example.localledger.domain.model.CategoryType
 import com.example.localledger.domain.model.SaveTransactionCommand
 import com.example.localledger.domain.model.TransactionType
 import com.example.localledger.domain.money.CurrencyCatalog
-import com.example.localledger.domain.repository.AccountRepository
-import com.example.localledger.domain.repository.CategoryRepository
 import com.example.localledger.domain.repository.TransactionRepository
 import com.example.localledger.domain.time.DateRangeResolver
 import com.example.localledger.domain.usecase.DeleteTransactionUseCase
@@ -25,14 +22,17 @@ import com.example.localledger.ui.common.runOutcome
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -74,6 +74,8 @@ data class EditorUiState(
     val allAccounts: List<Account> = emptyList(),
     val activeCategories: List<Category> = emptyList(),
     val allCategories: List<Category> = emptyList(),
+    val categoryRows: List<List<Category>> = emptyList(),
+    val categoriesLoaded: Boolean = false,
     val canSave: Boolean = false,
 )
 
@@ -82,8 +84,7 @@ data class EditorUiState(
 class TransactionEditorViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val appSession: AppSession,
-    private val accountRepository: AccountRepository,
-    private val categoryRepository: CategoryRepository,
+    private val catalog: EditorCatalog,
     private val transactionRepository: TransactionRepository,
     private val saveIncomeExpenseUseCase: SaveIncomeExpenseUseCase,
     private val saveTransferUseCase: SaveTransferUseCase,
@@ -92,45 +93,60 @@ class TransactionEditorViewModel @Inject constructor(
 ) : ViewModel() {
     private val transactionId: String? = savedStateHandle["transactionId"]
     private val zoneId: ZoneId = dateRangeResolver.zoneId()
+    private val initialType: TransactionType = savedStateHandle.get<String>("type")
+        ?.let { runCatching { TransactionType.valueOf(it) }.getOrNull() }
+        ?: TransactionType.EXPENSE
 
     private val inputFlow = MutableStateFlow(
         EditorInput(
-            type = savedStateHandle.get<String>("type")
-                ?.let { runCatching { TransactionType.valueOf(it) }.getOrNull() }
-                ?: TransactionType.EXPENSE,
+            type = initialType,
+            initialized = transactionId == null,
         ),
     )
 
     private val effectChannel = Channel<EditorEffect>(Channel.BUFFERED)
     val effects = effectChannel.receiveAsFlow()
 
+    private val categoryFlow = inputFlow
+        .map { it.type }
+        .distinctUntilChanged()
+        .flatMapLatest { type -> catalog.categoriesFor(type) }
+
     val uiState: StateFlow<EditorUiState> = combine(
         appSession.state,
         inputFlow,
-    ) { session, input -> Pair(session, input) }
-        .flatMapLatest { (session, input) ->
-            val ledgerId = session.currentLedgerId
-            if (ledgerId == null) {
-                flowOf(EditorUiState(isEdit = transactionId != null, isLoading = false))
-            } else {
-                combine(
-                    accountRepository.observeAccounts(ledgerId),
-                    categoryRepository.observeCategories(ledgerId, categoryTypeOf(input.type)),
-                ) { accounts, categories ->
-                    buildState(ledgerId, session, input, accounts, categories)
-                }
-            }
-        }
+        catalog.accounts,
+        categoryFlow,
+    ) { session, input, accounts, categories ->
+        assembleEditorUiState(
+            isEdit = transactionId != null,
+            ledgerId = session.currentLedgerId,
+            lastAccountId = session.currentLedgerId?.let { id ->
+                session.settings?.lastAccountIdByLedger?.get(id)
+            },
+            input = input,
+            accounts = accounts,
+            categories = categories,
+        )
+    }
+        .flowOn(Dispatchers.Default)
         .catch { error ->
-            val current = uiState.value
             emit(
-                current.copy(
-                    isLoading = false,
-                    input = current.input.copy(generalError = error.message ?: "读取本地数据失败"),
-                ),
+                assembleEditorUiState(
+                    isEdit = transactionId != null,
+                    ledgerId = appSession.state.value.currentLedgerId,
+                    lastAccountId = null,
+                    input = inputFlow.value.copy(generalError = error.message ?: "读取本地数据失败"),
+                    accounts = catalog.accounts.value,
+                    categories = catalog.categoriesFor(inputFlow.value.type).value,
+                ).copy(isLoading = false),
             )
         }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, EditorUiState(isEdit = transactionId != null))
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5_000),
+            initialUiState(),
+        )
 
     init {
         if (transactionId != null) {
@@ -166,56 +182,20 @@ class TransactionEditorViewModel @Inject constructor(
                     }
                 }
             }
-        } else {
-            inputFlow.update { it.copy(initialized = true) }
         }
     }
 
-    private fun buildState(
-        ledgerId: String,
-        session: com.example.localledger.ui.SessionState,
-        input: EditorInput,
-        accounts: List<Account>,
-        categories: List<Category>,
-    ): EditorUiState {
-        val activeAccounts = accounts.filter { !it.isArchived }
-        val activeCategories = categories.filter { !it.isArchived }
-        val lastAccountId = session.settings?.lastAccountIdByLedger?.get(ledgerId)
-        val effectiveAccountId = input.accountId
-            ?.takeIf { id -> accounts.any { it.id == id } }
-            ?: lastAccountId?.takeIf { id -> activeAccounts.any { it.id == id } }
-            ?: activeAccounts.firstOrNull()?.id
-        val effectiveToAccountId = if (input.type == TransactionType.TRANSFER) {
-            input.toAccountId
-                ?.takeIf { id -> accounts.any { it.id == id } && id != effectiveAccountId }
-                ?: activeAccounts.firstOrNull { it.id != effectiveAccountId }?.id
-        } else {
-            null
-        }
-        val normalized = input.copy(
-            accountId = effectiveAccountId,
-            toAccountId = effectiveToAccountId,
-        )
-        val canSave = !input.saving && input.initialized && when (input.type) {
-            TransactionType.TRANSFER ->
-                input.amountText.isNotBlank() &&
-                    effectiveAccountId != null &&
-                    effectiveToAccountId != null &&
-                    effectiveAccountId != effectiveToAccountId
-            else ->
-                input.amountText.isNotBlank() &&
-                    input.categoryId != null &&
-                    effectiveAccountId != null
-        }
-        return EditorUiState(
+    private fun initialUiState(): EditorUiState {
+        val session = appSession.state.value
+        return assembleEditorUiState(
             isEdit = transactionId != null,
-            isLoading = !input.initialized,
-            input = normalized,
-            activeAccounts = activeAccounts,
-            allAccounts = accounts,
-            activeCategories = activeCategories,
-            allCategories = categories,
-            canSave = canSave,
+            ledgerId = session.currentLedgerId,
+            lastAccountId = session.currentLedgerId?.let { id ->
+                session.settings?.lastAccountIdByLedger?.get(id)
+            },
+            input = inputFlow.value,
+            accounts = catalog.accounts.value,
+            categories = catalog.categoriesFor(inputFlow.value.type).value,
         )
     }
 
@@ -410,9 +390,52 @@ class TransactionEditorViewModel @Inject constructor(
         val code = uiState.value.allAccounts.firstOrNull { it.id == accountId }?.currencyCode ?: "CNY"
         return CurrencyCatalog.of(code).minorDigits
     }
+}
 
-    private fun categoryTypeOf(type: TransactionType): CategoryType = when (type) {
-        TransactionType.INCOME -> CategoryType.INCOME
-        else -> CategoryType.EXPENSE
+internal fun assembleEditorUiState(
+    isEdit: Boolean,
+    ledgerId: String?,
+    lastAccountId: String?,
+    input: EditorInput,
+    accounts: AccountSnapshot,
+    categories: CategorySnapshot,
+): EditorUiState {
+    val effectiveAccountId = input.accountId
+        ?.takeIf { id -> accounts.all.any { it.id == id } }
+        ?: lastAccountId?.takeIf { id -> ledgerId != null && accounts.active.any { it.id == id } }
+        ?: accounts.active.firstOrNull()?.id
+    val effectiveToAccountId = if (input.type == TransactionType.TRANSFER) {
+        input.toAccountId
+            ?.takeIf { id -> accounts.all.any { it.id == id } && id != effectiveAccountId }
+            ?: accounts.active.firstOrNull { it.id != effectiveAccountId }?.id
+    } else {
+        null
     }
+    val normalized = input.copy(
+        accountId = effectiveAccountId,
+        toAccountId = effectiveToAccountId,
+    )
+    val canSave = !input.saving && input.initialized && when (input.type) {
+        TransactionType.TRANSFER ->
+            input.amountText.isNotBlank() &&
+                effectiveAccountId != null &&
+                effectiveToAccountId != null &&
+                effectiveAccountId != effectiveToAccountId
+        else ->
+            input.amountText.isNotBlank() &&
+                input.categoryId != null &&
+                effectiveAccountId != null
+    }
+    return EditorUiState(
+        isEdit = isEdit,
+        isLoading = !input.initialized,
+        input = normalized,
+        activeAccounts = accounts.active,
+        allAccounts = accounts.all,
+        activeCategories = categories.active,
+        allCategories = categories.all,
+        categoryRows = categories.rows,
+        categoriesLoaded = categories.loaded,
+        canSave = canSave,
+    )
 }

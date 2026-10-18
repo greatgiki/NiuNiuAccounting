@@ -69,8 +69,10 @@ import com.example.localledger.ui.component.LoadingState
 import com.example.localledger.ui.component.MoneyText
 import com.example.localledger.ui.component.TransactionRowContent
 import com.example.localledger.ui.importing.PendingDraftBanner
+import com.example.localledger.ui.navigation.LocalSelectTopLevelPage
 import com.example.localledger.ui.navigation.Routes
-import com.example.localledger.ui.navigation.navigateToTransactions
+import com.example.localledger.ui.navigation.TopLevelPage
+import com.example.localledger.ui.navigation.claimPagerHorizontalGesture
 import com.example.localledger.ui.theme.LocalLedgerTheme
 import com.example.localledger.ui.theme.amountColor
 import kotlinx.coroutines.launch
@@ -86,6 +88,7 @@ fun HomeScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val session by appSession.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
+    val selectTopLevelPage = LocalSelectTopLevelPage.current
     var showLedgerPicker by remember { mutableStateOf(false) }
 
     when {
@@ -115,7 +118,7 @@ fun HomeScreen(
             }
             item(key = "month") {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().claimPagerHorizontalGesture(),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     IconButton(onClick = viewModel::previousMonth) {
@@ -245,7 +248,7 @@ fun HomeScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     SectionTitle("最近流水", modifier = Modifier.weight(1f))
-                    TextButton(onClick = { navController.navigateToTransactions() }) {
+                    TextButton(onClick = { selectTopLevelPage(TopLevelPage.Transactions) }) {
                         Text("查看全部")
                     }
                 }
