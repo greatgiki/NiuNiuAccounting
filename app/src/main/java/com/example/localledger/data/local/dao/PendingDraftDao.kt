@@ -17,6 +17,49 @@ interface PendingDraftDao {
     @Query("SELECT * FROM pending_drafts WHERE notification_key = :key")
     suspend fun findByNotificationKey(key: String): PendingDraftEntity?
 
+    @Query("SELECT * FROM pending_drafts WHERE sbn_key = :sbnKey")
+    suspend fun findBySbnKey(sbnKey: String): List<PendingDraftEntity>
+
+    @Query(
+        """
+        SELECT * FROM pending_drafts
+        WHERE ledger_id = :ledgerId AND created_at >= :createdAfter
+        """,
+    )
+    suspend fun listCreatedSince(ledgerId: String, createdAfter: Long): List<PendingDraftEntity>
+
+    @Query(
+        """
+        UPDATE pending_drafts
+        SET amount_minor = :amountMinor,
+            needs_amount = 0,
+            counterparty = :counterparty,
+            note = :note,
+            raw_text = :rawText,
+            likely_duplicate = :likelyDuplicate,
+            updated_at = :updatedAt
+        WHERE id = :id AND status = 'PENDING' AND needs_amount = 1
+        """,
+    )
+    suspend fun completeAmount(
+        id: String,
+        amountMinor: Long,
+        counterparty: String?,
+        note: String?,
+        rawText: String,
+        likelyDuplicate: Boolean,
+        updatedAt: Long,
+    ): Int
+
+    @Query(
+        """
+        UPDATE pending_drafts
+        SET amount_minor = :amountMinor, needs_amount = 0, updated_at = :updatedAt
+        WHERE id = :id AND status = 'PENDING'
+        """,
+    )
+    suspend fun setAmount(id: String, amountMinor: Long, updatedAt: Long): Int
+
     @Query(
         """
         SELECT * FROM pending_drafts

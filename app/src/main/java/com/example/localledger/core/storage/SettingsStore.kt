@@ -1,6 +1,7 @@
 package com.example.localledger.core.storage
 
 import android.util.AtomicFile
+import android.util.Log
 import com.example.localledger.domain.error.LedgerException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -26,6 +27,7 @@ data class AppSettings(
     val autoConfirmDrafts: Boolean = false,
     val wechatNotificationEnabled: Boolean = true,
     val alipayNotificationEnabled: Boolean = true,
+    val keepAmountlessDrafts: Boolean = true,
     val importAccountIdBySource: Map<String, String> = emptyMap(),
 ) {
     fun importAccountKey(ledgerId: String, source: String) = "$ledgerId|$source"
@@ -44,17 +46,12 @@ class SettingsStore @Inject constructor(
         prettyPrint = true
     }
 
+    @Volatile
+    private var memory: AppSettings? = null
+
     suspend fun peek(): AppSettings? = mutex.withLock {
         withContext(Dispatchers.IO) {
-            val file = storageManager.ensureDirectories().settingsFile
-            if (!file.exists()) return@withContext null
-            try {
-                AtomicFile(file).openRead().use { input ->
-                    json.decodeFromString<AppSettings>(input.bufferedReader().readText())
-                }
-            } catch (_: Exception) {
-                null
-            }
+            readQuietly()?.also { memory = it } ?: memory
         }
     }
 
@@ -71,6 +68,7 @@ class SettingsStore @Inject constructor(
                 AppSettings(defaultLedgerId)
             }
             write(atomicFile, settings)
+            memory = settings
             settings
         }
     }
@@ -85,7 +83,23 @@ class SettingsStore @Inject constructor(
             } catch (error: Exception) {
                 throw LedgerException.LocalStorage(error)
             }
-            transform(current).also { write(atomicFile, it) }
+            transform(current).also {
+                write(atomicFile, it)
+                memory = it
+            }
+        }
+    }
+
+    private fun readQuietly(): AppSettings? {
+        val file = storageManager.ensureDirectories().settingsFile
+        if (!file.exists()) return null
+        return try {
+            AtomicFile(file).openRead().use { input ->
+                json.decodeFromString<AppSettings>(input.bufferedReader().readText())
+            }
+        } catch (error: Exception) {
+            Log.w("LocalLedger", "读取设置失败，继续使用最近一次成功读取的结果", error)
+            null
         }
     }
 

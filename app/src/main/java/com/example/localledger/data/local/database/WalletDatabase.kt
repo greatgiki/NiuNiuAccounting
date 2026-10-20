@@ -38,7 +38,7 @@ import com.example.localledger.data.local.entity.TransactionEntity
         ExchangeRateHistoryEntity::class,
         PendingDraftEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 @TypeConverters(RoomConverters::class)
@@ -54,7 +54,7 @@ abstract class WalletDatabase : RoomDatabase() {
 
     companion object {
         const val FILE_NAME = "ledger.db"
-        val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+        val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
 
         val INTEGRITY_CALLBACK = object : Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {
@@ -319,6 +319,21 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_pending_drafts_category_id` ON `pending_drafts` (`category_id`)")
         db.execSQL(
             "CREATE UNIQUE INDEX IF NOT EXISTS `index_pending_drafts_notification_key` ON `pending_drafts` (`notification_key`)",
+        )
+    }
+}
+
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `pending_drafts` ADD COLUMN `needs_amount` INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE `pending_drafts` ADD COLUMN `sbn_key` TEXT")
+        db.execSQL("ALTER TABLE `pending_drafts` ADD COLUMN `group_key` TEXT")
+        db.execSQL(
+            """
+            UPDATE `pending_drafts`
+            SET `sbn_key` = `notification_key`
+            WHERE `sbn_key` IS NULL AND `notification_key` IS NOT NULL
+            """.trimIndent(),
         )
     }
 }

@@ -10,6 +10,7 @@ import com.example.localledger.domain.error.LedgerException
 import com.example.localledger.domain.usecase.GenerateRecurringTransactionsUseCase
 import com.example.localledger.domain.usecase.RefreshExchangeRatesUseCase
 import com.example.localledger.di.ApplicationScope
+import com.example.localledger.notification.NotificationRebind
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -42,6 +43,7 @@ class BackendInitializer @Inject constructor(
     val state: StateFlow<InitializationState> = mutableState.asStateFlow()
 
     fun start() {
+        NotificationRebind.ensure(context)
         applicationScope.launch { initialize() }
     }
 

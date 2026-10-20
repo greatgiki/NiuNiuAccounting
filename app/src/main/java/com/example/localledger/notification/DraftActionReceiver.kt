@@ -31,6 +31,11 @@ class DraftActionReceiver : BroadcastReceiver() {
                     ACTION_DISMISS -> draftRepository.dismiss(draftId)
                     ACTION_CONFIRM -> {
                         when (draftRepository.confirm(draftId)) {
+                            DraftConfirmResult.NeedsAmount -> {
+                                pendingNavigation.request(Routes.DRAFTS)
+                                notifier.showNeedAmount(draftId)
+                                return@launch
+                            }
                             is DraftConfirmResult.MissingAssignment -> {
                                 pendingNavigation.request(Routes.DRAFTS)
                                 notifier.showNeedAssignment(draftId)
