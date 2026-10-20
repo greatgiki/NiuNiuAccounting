@@ -315,6 +315,9 @@ data class PendingDraftEntity(
     @ColumnInfo(name = "likely_duplicate", defaultValue = "0") val likelyDuplicate: Boolean = false,
     @ColumnInfo(name = "created_at") val createdAt: Long,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
+    @ColumnInfo(name = "needs_amount", defaultValue = "0") val needsAmount: Boolean = false,
+    @ColumnInfo(name = "sbn_key") val sbnKey: String? = null,
+    @ColumnInfo(name = "group_key") val groupKey: String? = null,
 )
 
 @Entity(tableName = "exchange_rate_snapshots")

@@ -2,7 +2,9 @@ package com.example.localledger.domain.importing
 
 import com.example.localledger.domain.model.TransactionType
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PaymentNotificationParserTest {
@@ -16,6 +18,18 @@ class PaymentNotificationParserTest {
             Case(BillSource.WECHAT, "收款到账88.00元", TransactionType.INCOME, 8_800L, ""),
             Case(BillSource.WECHAT, "已收款¥20.00", TransactionType.INCOME, 2_000L, ""),
             Case(BillSource.WECHAT, "收款金额 ¥3.50", TransactionType.INCOME, 350L, ""),
+            Case(BillSource.WECHAT, "付款金额¥12.50", TransactionType.EXPENSE, 1_250L, ""),
+            Case(BillSource.WECHAT, "付款金额：¥12.50", TransactionType.EXPENSE, 1_250L, ""),
+            Case(BillSource.WECHAT, "你已支付¥8.00", TransactionType.EXPENSE, 800L, ""),
+            Case(BillSource.WECHAT, "已支付¥12.50", TransactionType.EXPENSE, 1_250L, ""),
+            Case(BillSource.WECHAT, "微信支付凭证 ¥12.50", TransactionType.EXPENSE, 1_250L, ""),
+            Case(BillSource.WECHAT, "微信支付凭证¥1,250.50", TransactionType.EXPENSE, 125_050L, ""),
+            Case(BillSource.WECHAT, "已支付￥１，２５０．５０", TransactionType.EXPENSE, 125_050L, ""),
+            Case(BillSource.WECHAT, "[2条]微信支付: 已支付¥12.50", TransactionType.EXPENSE, 1_250L, ""),
+            Case(BillSource.WECHAT, "微信收款助手: 微信支付收款0.01元", TransactionType.INCOME, 1L, ""),
+            Case(BillSource.WECHAT, "收款到账通知 ¥12.50", TransactionType.INCOME, 1_250L, ""),
+            Case(BillSource.WECHAT, "[店员消息]收款到账12.50元", TransactionType.INCOME, 1_250L, ""),
+            Case(BillSource.WECHAT, "［店员消息］收款到账通知 ¥0.01", TransactionType.INCOME, 1L, ""),
             Case(BillSource.ALIPAY, "你已成功付款12.50元", TransactionType.EXPENSE, 1_250L, ""),
             Case(BillSource.ALIPAY, "成功付款¥9.90", TransactionType.EXPENSE, 990L, ""),
             Case(BillSource.ALIPAY, "付款成功，12.00元", TransactionType.EXPENSE, 1_200L, ""),
@@ -23,13 +37,39 @@ class PaymentNotificationParserTest {
             Case(BillSource.ALIPAY, "成功收款¥3.50", TransactionType.INCOME, 350L, ""),
             Case(BillSource.ALIPAY, "支付宝成功收款100元", TransactionType.INCOME, 10_000L, ""),
             Case(BillSource.ALIPAY, "你已付款6.60元\n收款方：星巴克", TransactionType.EXPENSE, 660L, "星巴克"),
+            Case(BillSource.ALIPAY, "通过扫码向你付款0.01元", TransactionType.INCOME, 1L, ""),
+            Case(BillSource.ALIPAY, "向你付款¥6.00", TransactionType.INCOME, 600L, ""),
         )
         cases.forEach { sample ->
             val parsed = PaymentNotificationParser.parse(sample.source, sample.text)
             assertEquals(sample.text, sample.type, parsed?.type)
             assertEquals(sample.text, sample.amountMinor, parsed?.amountMinor)
             assertEquals(sample.text, sample.counterparty, parsed?.counterparty)
+            assertEquals(sample.text, false, parsed?.needsAmount)
         }
+    }
+
+    @Test
+    fun paymentWordingWithoutAmountBecomesNeedsAmount() {
+        val samples = listOf(
+            BillSource.WECHAT to "微信支付\n微信支付凭证",
+            BillSource.WECHAT to "[2条]微信支付: 微信支付凭证",
+            BillSource.WECHAT to "微信支付: 支付成功",
+            BillSource.WECHAT to "支付成功",
+            BillSource.WECHAT to "微信收款助手",
+            BillSource.ALIPAY to "你已成功付款",
+            BillSource.ALIPAY to "成功收款",
+        )
+        samples.forEach { (source, text) ->
+            val parsed = PaymentNotificationParser.parse(source, text)
+            assertEquals(text, true, parsed?.needsAmount)
+            assertNull(text, parsed?.amountMinor)
+        }
+        val voucher = PaymentNotificationParser.parse(BillSource.WECHAT, "[2条]微信支付: 微信支付凭证")
+        assertEquals(TransactionType.EXPENSE, voucher?.type)
+        val receipt = PaymentNotificationParser.parse(BillSource.WECHAT, "微信收款助手: 微信支付收款")
+        assertEquals(TransactionType.INCOME, receipt?.type)
+        assertTrue(receipt?.needsAmount == true)
     }
 
     @Test
@@ -37,7 +77,8 @@ class PaymentNotificationParserTest {
         assertNull(PaymentNotificationParser.parse(BillSource.WECHAT, "张三: 晚上吃饭吗"))
         assertNull(PaymentNotificationParser.parse(BillSource.ALIPAY, "你有一条新消息"))
         assertNull(PaymentNotificationParser.parse(BillSource.WECHAT, ""))
-        assertNull(PaymentNotificationParser.parse(BillSource.ALIPAY, "你已成功付款"))
+        assertNull(PaymentNotificationParser.parse(BillSource.ALIPAY, ""))
+        assertFalse(PaymentNotificationParser.parse(BillSource.WECHAT, "微信支付凭证")?.needsAmount != true)
     }
 
     private data class Case(
