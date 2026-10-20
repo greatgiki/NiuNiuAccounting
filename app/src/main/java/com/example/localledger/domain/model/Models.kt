@@ -1,5 +1,7 @@
 package com.example.localledger.domain.model
 
+import androidx.compose.runtime.Immutable
+
 import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.YearMonth
@@ -18,6 +20,7 @@ data class Ledger(
     val isArchived: Boolean = false,
 )
 
+@Immutable
 data class Account(
     val id: String,
     val ledgerId: String,
@@ -31,6 +34,7 @@ data class Account(
     val updatedAt: Long,
 )
 
+@Immutable
 data class Category(
     val id: String,
     val ledgerId: String,
@@ -43,6 +47,7 @@ data class Category(
     val updatedAt: Long,
 )
 
+@Immutable
 data class Transaction(
     val id: String,
     val ledgerId: String,
@@ -68,6 +73,7 @@ data class AccountBalance(
     val balanceMinor: Long,
 )
 
+@Immutable
 data class TransactionDetail(
     val transaction: Transaction,
     val accountName: String,
@@ -128,6 +134,7 @@ data class IncomeExpenseSummary(
         get() = Math.subtractExact(incomeMinor, expenseMinor)
 }
 
+@Immutable
 data class CategoryTotal(
     val categoryId: String,
     val categoryName: String,

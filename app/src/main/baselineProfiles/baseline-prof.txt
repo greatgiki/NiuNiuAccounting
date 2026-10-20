@@ -30,4 +30,15 @@ Lcom/example/localledger/ui/editor/TransactionEditorScreenKt;
 Lcom/example/localledger/ui/editor/TransactionEditorViewModel;
 Lcom/example/localledger/ui/editor/EditorCatalog;
 Lcom/example/localledger/ui/common/CategoryIcons;
+Lcom/example/localledger/ui/theme/ThemeKt;
+Lcom/example/localledger/ui/theme/LedgerMotion;
+Lcom/example/localledger/ui/component/LedgerSurfacesKt;
+Lcom/example/localledger/ui/component/CommonComponentsKt;
+Lcom/example/localledger/ui/startup/StartupScreensKt;
 Lcom/example/localledger/data/local/database/DatabaseProvider;
+
+HSPLcom/example/localledger/ui/theme/ThemeKt;->LocalLedgerTheme(Lcom/example/localledger/core/storage/ThemeMode;Lkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;I)V
+HSPLcom/example/localledger/ui/navigation/AppNavHostKt;->AppNavHost(Lcom/example/localledger/ui/AppSession;Lcom/example/localledger/notification/PendingNavigation;Landroidx/compose/runtime/Composer;I)V
+HSPLcom/example/localledger/ui/home/HomeScreenKt;->HomeScreen(Lcom/example/localledger/ui/AppSession;Landroidx/navigation/NavHostController;Lcom/example/localledger/ui/home/HomeViewModel;Landroidx/compose/runtime/Composer;II)V
+HSPLcom/example/localledger/ui/detail/TransactionListScreenKt;->TransactionListScreen(Lcom/example/localledger/ui/AppSession;Landroidx/navigation/NavHostController;Lcom/example/localledger/ui/detail/TransactionListViewModel;Landroidx/compose/runtime/Composer;II)V
+HSPLcom/example/localledger/ui/editor/TransactionEditorScreenKt;->AmountKeypad(Lkotlin/jvm/functions/Function1;Landroidx/compose/ui/Modifier;Lkotlin/jvm/functions/Function0;ZLjava/lang/String;Landroidx/compose/runtime/Composer;II)V

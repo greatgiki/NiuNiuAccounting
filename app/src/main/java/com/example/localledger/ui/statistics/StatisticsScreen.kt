@@ -25,7 +25,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material3.Card
 import androidx.compose.material3.Surface
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -118,7 +117,7 @@ fun StatisticsScreen(
                 )
             }
 
-            Card(modifier = Modifier.fillMaxWidth()) {
+            com.example.localledger.ui.component.LedgerCard(modifier = Modifier.fillMaxWidth()) {
                 SummaryAmountRow(
                     incomeMinor = state.incomeMinor,
                     expenseMinor = state.expenseMinor,
@@ -430,7 +429,7 @@ internal fun ExpenseShareChart(
     val progress = remember { Animatable(0f) }
     LaunchedEffect(slices) {
         progress.snapTo(0f)
-        progress.animateTo(1f, tween(700))
+        progress.animateTo(1f, com.example.localledger.ui.theme.LedgerMotion.medium())
     }
     BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
         if (maxWidth < 360.dp) {
@@ -551,7 +550,7 @@ internal fun ExpenseCategoryBars(
     val progress = remember { Animatable(0f) }
     LaunchedEffect(categories, totalMinor) {
         progress.snapTo(0f)
-        progress.animateTo(1f, tween(700))
+        progress.animateTo(1f, com.example.localledger.ui.theme.LedgerMotion.medium())
     }
     val track = MaterialTheme.colorScheme.surfaceVariant
     val sliceColors = chartPalette(LocalLedgerDarkTheme.current)
@@ -635,7 +634,7 @@ private fun IncomeExpenseTrendChart(
     val progress = remember { Animatable(0f) }
     LaunchedEffect(points) {
         progress.snapTo(0f)
-        progress.animateTo(1f, tween(700))
+        progress.animateTo(1f, com.example.localledger.ui.theme.LedgerMotion.medium())
     }
     val gridColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
 

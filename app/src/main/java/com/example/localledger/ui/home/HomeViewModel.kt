@@ -1,5 +1,6 @@
 package com.example.localledger.ui.home
 
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.localledger.domain.budget.BudgetMath
@@ -27,6 +28,7 @@ import java.time.YearMonth
 import java.time.ZoneId
 import javax.inject.Inject
 
+@Immutable
 data class HomeBudgetLine(
     val id: String,
     val label: String,
@@ -37,6 +39,7 @@ data class HomeBudgetLine(
     val overspent: Boolean,
 )
 
+@Immutable
 data class HomeUiState(
     val isLoading: Boolean = true,
     val ledgerName: String = "",

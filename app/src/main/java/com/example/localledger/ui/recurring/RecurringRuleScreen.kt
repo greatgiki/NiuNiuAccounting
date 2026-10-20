@@ -108,7 +108,7 @@ fun RecurringRuleScreen(
                 },
             )
         },
-        snackbarHost = { SnackbarHost(snackbar) },
+        snackbarHost = { com.example.localledger.ui.component.LedgerSnackbarHost(snackbar) },
         floatingActionButton = {
             FloatingActionButton(onClick = {
                 saveGate.reset()

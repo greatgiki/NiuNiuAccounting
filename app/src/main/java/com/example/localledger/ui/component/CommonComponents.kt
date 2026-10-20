@@ -16,12 +16,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.Archive
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.outlined.Archive
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -50,6 +51,7 @@ import com.example.localledger.ui.navigation.claimPagerHorizontalGesture
 import com.example.localledger.ui.common.DateTimeFormatters
 import com.example.localledger.ui.common.MoneyFormatter
 import com.example.localledger.ui.common.categoryAccent
+import com.example.localledger.ui.theme.LocalLedgerTones
 import com.example.localledger.ui.theme.amountColor
 import java.time.ZoneId
 
@@ -112,10 +114,26 @@ fun LoadingState(message: String = "加载中…") {
 
 @Composable
 fun EmptyState(message: String, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
+    val tones = LocalLedgerTones.current
     Column(
         modifier = Modifier.fillMaxWidth().padding(48.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        Box(
+            modifier = Modifier
+                .size(56.dp)
+                .clip(CircleShape)
+                .background(tones.accent.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Outlined.Inbox,
+                contentDescription = null,
+                tint = tones.accent,
+                modifier = Modifier.size(26.dp),
+            )
+        }
+        Spacer(Modifier.height(16.dp))
         Text(
             message,
             style = MaterialTheme.typography.bodyLarge,
@@ -176,8 +194,14 @@ fun ConfirmDeleteDialog(
             }
         },
         confirmButton = {
+            val haptic = rememberLedgerHaptic()
             TextButton(
-                onClick = { if (!submitting) onConfirm() },
+                onClick = {
+                    if (!submitting) {
+                        haptic()
+                        onConfirm()
+                    }
+                },
                 enabled = !submitting,
             ) {
                 Text(
@@ -193,9 +217,9 @@ fun ConfirmDeleteDialog(
 }
 
 private fun confirmIcon(confirmLabel: String): ImageVector = when (confirmLabel) {
-    "归档" -> Icons.Default.Archive
-    "停用" -> Icons.Default.VisibilityOff
-    else -> Icons.Default.Delete
+    "归档" -> Icons.Outlined.Archive
+    "停用" -> Icons.Outlined.VisibilityOff
+    else -> Icons.Outlined.Delete
 }
 
 @Composable
@@ -215,12 +239,12 @@ fun CollapsibleSectionHeader(
     ) {
         Text(
             title,
-            style = MaterialTheme.typography.titleSmall,
+            style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f),
         )
         Icon(
-            imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+            imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
             contentDescription = action,
         )
     }
@@ -254,7 +278,7 @@ fun SwipeToDeleteRow(
                 contentAlignment = Alignment.CenterEnd,
             ) {
                 Icon(
-                    Icons.Default.Delete,
+                    Icons.Outlined.Delete,
                     contentDescription = "删除",
                     tint = MaterialTheme.colorScheme.onErrorContainer,
                 )
@@ -348,12 +372,12 @@ fun TransactionRowContent(
         ) {
             Icon(
                 imageVector = if (type == TransactionType.TRANSFER) {
-                    Icons.AutoMirrored.Filled.ArrowForward
+                    Icons.AutoMirrored.Outlined.ArrowForward
                 } else {
                     CategoryIcons.resolve(iconKey).image
                 },
                 contentDescription = title,
-                modifier = Modifier.size(22.dp),
+                modifier = Modifier.size(20.dp),
                 tint = accent,
             )
         }

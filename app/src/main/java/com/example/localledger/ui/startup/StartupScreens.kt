@@ -39,8 +39,18 @@ fun InitializationLoadingScreen() {
         )
         Spacer(Modifier.height(16.dp))
         Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineSmall)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "本地账本",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+        )
         Spacer(Modifier.height(24.dp))
-        CircularProgressIndicator(modifier = Modifier.size(36.dp))
+        CircularProgressIndicator(
+            modifier = Modifier.size(36.dp),
+            color = MaterialTheme.colorScheme.primary,
+            trackColor = MaterialTheme.colorScheme.surfaceVariant,
+        )
         Spacer(Modifier.height(16.dp))
         Text("正在准备本地账本…", style = MaterialTheme.typography.bodyLarge)
     }
@@ -84,6 +94,12 @@ fun DataLossNoticeScreen(onAcknowledge: () -> Unit) {
         )
         Spacer(Modifier.height(12.dp))
         Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineSmall)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "只留在这台设备上",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+        )
         Spacer(Modifier.height(20.dp))
         Text(
             "数据只保存在本机",

@@ -1,13 +1,12 @@
 package com.example.localledger.ui.navigation
 
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -15,18 +14,20 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Assessment
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.FilledIconButton
+import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.PieChart
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -37,10 +38,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import com.example.localledger.ui.component.LedgerHairline
+import com.example.localledger.ui.component.rememberLedgerHaptic
+import com.example.localledger.ui.theme.LedgerMotion
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -119,10 +123,10 @@ enum class TopLevelPage(
     val label: String,
     val icon: ImageVector,
 ) {
-    Home(Routes.HOME, "首页", Icons.Default.Home),
-    Transactions(Routes.TRANSACTIONS, "明细", Icons.AutoMirrored.Filled.List),
-    Statistics(Routes.STATISTICS, "统计", Icons.Default.Assessment),
-    Settings(Routes.SETTINGS, "设置", Icons.Default.Settings),
+    Home(Routes.HOME, "首页", Icons.Outlined.Home),
+    Transactions(Routes.TRANSACTIONS, "明细", Icons.AutoMirrored.Outlined.ReceiptLong),
+    Statistics(Routes.STATISTICS, "统计", Icons.Outlined.PieChart),
+    Settings(Routes.SETTINGS, "设置", Icons.Outlined.Settings),
     ;
 
     companion object {
@@ -130,9 +134,9 @@ enum class TopLevelPage(
     }
 }
 
-internal const val TAB_SWITCH_MILLIS = 280
+internal const val TAB_SWITCH_MILLIS = LedgerMotion.Medium
 
-internal fun <T> tabSwitchTween() = tween<T>(durationMillis = TAB_SWITCH_MILLIS, easing = FastOutSlowInEasing)
+internal fun <T> tabSwitchTween() = LedgerMotion.medium<T>()
 
 internal fun pageFadeAlpha(currentPage: Int, currentPageOffsetFraction: Float, page: Int): Float {
     val distance = abs((currentPage - page) + currentPageOffsetFraction).coerceIn(0f, 1f)
@@ -355,14 +359,7 @@ private fun TopLevelPager(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-                .graphicsLayer {
-                    alpha = pageFadeAlpha(
-                        pagerState.currentPage,
-                        pagerState.currentPageOffsetFraction,
-                        page,
-                    )
-                },
+                .background(MaterialTheme.colorScheme.background),
         ) {
             saveableStateHolder.SaveableStateProvider(TopLevelPage.entries[page].route) {
                 when (TopLevelPage.entries[page]) {
@@ -385,35 +382,63 @@ internal fun LedgerBottomBar(
     onSelect: (TopLevelPage) -> Unit,
     onCreate: () -> Unit,
 ) {
-    NavigationBar {
-        TopLevelPage.entries.take(2).forEach { page ->
+    val haptic = rememberLedgerHaptic()
+    val itemColors = NavigationBarItemDefaults.colors(
+        selectedIconColor = MaterialTheme.colorScheme.primary,
+        selectedTextColor = MaterialTheme.colorScheme.primary,
+        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Column {
+        LedgerHairline()
+        NavigationBar(
+            containerColor = MaterialTheme.colorScheme.surface,
+            tonalElevation = 0.dp,
+        ) {
+            TopLevelPage.entries.take(2).forEach { page ->
+                NavigationBarItem(
+                    selected = selectedPage == page,
+                    onClick = { onSelect(page) },
+                    icon = { Icon(page.icon, contentDescription = page.label) },
+                    label = { Text(page.label) },
+                    colors = itemColors,
+                )
+            }
             NavigationBarItem(
-                selected = selectedPage == page,
-                onClick = { onSelect(page) },
-                icon = { Icon(page.icon, contentDescription = page.label) },
-                label = { Text(page.label) },
+                selected = false,
+                onClick = {
+                    haptic()
+                    onCreate()
+                },
+                colors = itemColors,
+                icon = {
+                    Surface(
+                        onClick = {
+                            haptic()
+                            onCreate()
+                        },
+                        modifier = Modifier.size(48.dp),
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(Icons.Outlined.Add, contentDescription = "记一笔")
+                        }
+                    }
+                },
+                label = { Text("记一笔") },
             )
-        }
-        NavigationBarItem(
-            selected = false,
-            onClick = onCreate,
-            icon = {
-                FilledIconButton(
-                    onClick = onCreate,
-                    modifier = Modifier.size(48.dp),
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = null)
-                }
-            },
-            label = { Text("记一笔") },
-        )
-        TopLevelPage.entries.drop(2).forEach { page ->
-            NavigationBarItem(
-                selected = selectedPage == page,
-                onClick = { onSelect(page) },
-                icon = { Icon(page.icon, contentDescription = page.label) },
-                label = { Text(page.label) },
-            )
+            TopLevelPage.entries.drop(2).forEach { page ->
+                NavigationBarItem(
+                    selected = selectedPage == page,
+                    onClick = { onSelect(page) },
+                    icon = { Icon(page.icon, contentDescription = page.label) },
+                    label = { Text(page.label) },
+                    colors = itemColors,
+                )
+            }
         }
     }
 }
