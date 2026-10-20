@@ -91,7 +91,7 @@ fun LedgerManageScreen(
                 },
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = { com.example.localledger.ui.component.LedgerSnackbarHost(snackbarHostState) },
         floatingActionButton = {
             FloatingActionButton(onClick = {
                 saveGate.reset()

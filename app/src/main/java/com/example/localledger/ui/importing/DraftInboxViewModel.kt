@@ -45,7 +45,7 @@ class DraftInboxViewModel @Inject constructor(
     dateRangeResolver: DateRangeResolver,
 ) : ViewModel() {
     val zoneId: ZoneId = dateRangeResolver.zoneId()
-    val effects = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val effects = MutableSharedFlow<DraftInboxEffect>(extraBufferCapacity = 1)
 
     val uiState: StateFlow<DraftInboxUiState> = appSession.state
         .map { it.currentLedgerId }
@@ -80,10 +80,10 @@ class DraftInboxViewModel @Inject constructor(
     fun confirm(draft: PendingDraft) {
         viewModelScope.launch {
             when (draftRepository.confirm(draft.id)) {
-                is DraftConfirmResult.Confirmed -> effects.emit("已记入流水")
-                DraftConfirmResult.MissingAssignment -> effects.emit("请先选择分类和账户")
-                DraftConfirmResult.NeedsAmount -> effects.emit("请先补全金额")
-                DraftConfirmResult.NotPending -> effects.emit("这条草稿已经处理过")
+                is DraftConfirmResult.Confirmed -> effects.emit(DraftInboxEffect.Message("已记入流水"))
+                DraftConfirmResult.MissingAssignment -> effects.emit(DraftInboxEffect.Message("请先选择分类和账户"))
+                DraftConfirmResult.NeedsAmount -> effects.emit(DraftInboxEffect.Message("请先补全金额"))
+                DraftConfirmResult.NotPending -> effects.emit(DraftInboxEffect.Message("这条草稿已经处理过"))
             }
         }
     }
@@ -92,18 +92,34 @@ class DraftInboxViewModel @Inject constructor(
         viewModelScope.launch {
             val minor = BillAmounts.parseYuanToMinor(raw)
             if (minor == null) {
-                effects.emit("请输入有效金额")
+                effects.emit(DraftInboxEffect.Message("请输入有效金额"))
                 return@launch
             }
             if (draftRepository.updateAmount(draftId, minor)) {
-                effects.emit("金额已补全")
+                effects.emit(DraftInboxEffect.Message("金额已补全"))
             }
         }
     }
 
     fun dismiss(draftId: String) {
-        viewModelScope.launch { draftRepository.dismiss(draftId) }
+        viewModelScope.launch {
+            draftRepository.dismiss(draftId)
+            effects.emit(DraftInboxEffect.Dismissed(draftId, "已忽略这条草稿"))
+        }
     }
+
+    fun restore(draftId: String) {
+        viewModelScope.launch {
+            if (draftRepository.restore(draftId)) {
+                effects.emit(DraftInboxEffect.Message("已撤销忽略"))
+            }
+        }
+    }
+}
+
+sealed interface DraftInboxEffect {
+    data class Message(val text: String) : DraftInboxEffect
+    data class Dismissed(val draftId: String, val text: String) : DraftInboxEffect
 }
 
 data class PendingDraftBadge(

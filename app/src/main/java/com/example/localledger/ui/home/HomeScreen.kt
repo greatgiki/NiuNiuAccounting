@@ -24,10 +24,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material3.Card
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.ArrowDropDown
+import androidx.compose.foundation.border
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -64,6 +64,7 @@ import com.example.localledger.ui.account.accountTypeIcon
 import com.example.localledger.ui.common.DateTimeFormatters
 import com.example.localledger.ui.common.MoneyFormatter
 import com.example.localledger.ui.component.EmptyState
+import com.example.localledger.ui.component.LedgerCard
 import com.example.localledger.ui.component.ErrorState
 import com.example.localledger.ui.component.LoadingState
 import com.example.localledger.ui.component.MoneyText
@@ -73,7 +74,9 @@ import com.example.localledger.ui.navigation.LocalSelectTopLevelPage
 import com.example.localledger.ui.navigation.Routes
 import com.example.localledger.ui.navigation.TopLevelPage
 import com.example.localledger.ui.navigation.claimPagerHorizontalGesture
+import com.example.localledger.ui.theme.LedgerMotion
 import com.example.localledger.ui.theme.LocalLedgerTheme
+import com.example.localledger.ui.theme.LocalLedgerTones
 import com.example.localledger.ui.theme.amountColor
 import kotlinx.coroutines.launch
 import java.time.YearMonth
@@ -110,7 +113,7 @@ fun HomeScreen(
                             overflow = TextOverflow.Ellipsis,
                         )
                         Icon(
-                            Icons.Default.ArrowDropDown,
+                            Icons.Outlined.ArrowDropDown,
                             contentDescription = "切换账本",
                         )
                     }
@@ -123,7 +126,7 @@ fun HomeScreen(
                 ) {
                     IconButton(onClick = viewModel::previousMonth) {
                         Icon(
-                            Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                            Icons.AutoMirrored.Outlined.KeyboardArrowLeft,
                             contentDescription = "上一月",
                         )
                     }
@@ -146,7 +149,7 @@ fun HomeScreen(
                     Spacer(Modifier.weight(1f))
                     IconButton(onClick = viewModel::nextMonth) {
                         Icon(
-                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            Icons.AutoMirrored.Outlined.KeyboardArrowRight,
                             contentDescription = "下一月",
                         )
                     }
@@ -197,9 +200,8 @@ fun HomeScreen(
                 }
             } else {
                 item(key = "balances-card") {
-                    Card(
+                    LedgerCard(
                         modifier = Modifier.fillMaxWidth().animateItem(),
-                        shape = MaterialTheme.shapes.large,
                     ) {
                         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
                             state.accountBalances.forEach { balance ->
@@ -263,9 +265,8 @@ fun HomeScreen(
                 }
             } else {
                 item(key = "recent-card") {
-                    Card(
+                    LedgerCard(
                         modifier = Modifier.fillMaxWidth().animateItem(),
-                        shape = MaterialTheme.shapes.large,
                     ) {
                         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
                             state.recentTransactions.forEach { detail ->
@@ -351,57 +352,58 @@ fun MonthOverviewCard(
     currencyCode: String,
     modifier: Modifier = Modifier,
 ) {
-    val scheme = MaterialTheme.colorScheme
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
+    val tones = LocalLedgerTones.current
+    val shape = MaterialTheme.shapes.extraLarge
+    val heroBrush = remember(tones) {
+        Brush.verticalGradient(listOf(tones.heroTop, tones.heroBottom))
+    }
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .border(0.5.dp, tones.accent.copy(alpha = 0.45f), shape)
+            .background(heroBrush)
+            .padding(horizontal = 22.dp, vertical = 24.dp),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    Brush.linearGradient(
-                        listOf(scheme.primary, scheme.tertiary),
-                    ),
+        Text(
+            "本月结余",
+            style = MaterialTheme.typography.labelLarge,
+            color = tones.heroMuted,
+        )
+        AnimatedContent(
+            targetState = MonthFigures(yearMonth, incomeMinor, expenseMinor),
+            transitionSpec = {
+                val forward = targetState.yearMonth >= initialState.yearMonth
+                val enter = slideInVertically(LedgerMotion.medium()) { if (forward) it / 2 else -it / 2 } +
+                    fadeIn(LedgerMotion.short())
+                val exit = slideOutVertically(LedgerMotion.medium()) { if (forward) -it / 2 else it / 2 } +
+                    fadeOut(LedgerMotion.short())
+                enter togetherWith exit
+            },
+            label = "month-figures",
+        ) { figures ->
+            Column {
+                Text(
+                    MoneyFormatter.format(figures.incomeMinor - figures.expenseMinor, currencyCode),
+                    style = MaterialTheme.typography.displaySmall,
+                    color = tones.accent,
                 )
-                .padding(horizontal = 20.dp, vertical = 22.dp),
-        ) {
-            Text(
-                "本月结余",
-                style = MaterialTheme.typography.labelLarge,
-                color = scheme.onPrimary.copy(alpha = 0.86f),
-            )
-            AnimatedContent(
-                targetState = MonthFigures(yearMonth, incomeMinor, expenseMinor),
-                transitionSpec = {
-                    val forward = targetState.yearMonth >= initialState.yearMonth
-                    val enter = slideInVertically(tween(280)) { if (forward) it / 2 else -it / 2 } + fadeIn(tween(220))
-                    val exit = slideOutVertically(tween(280)) { if (forward) -it / 2 else it / 2 } + fadeOut(tween(180))
-                    enter togetherWith exit
-                },
-                label = "month-figures",
-            ) { figures ->
-                Column {
-                    Text(
-                        MoneyFormatter.format(figures.incomeMinor - figures.expenseMinor, currencyCode),
-                        style = MaterialTheme.typography.displaySmall.copy(fontFeatureSettings = "tnum"),
-                        color = scheme.onPrimary,
+                Spacer(Modifier.height(16.dp))
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    OverviewSecondary(
+                        label = "收入",
+                        amountMinor = figures.incomeMinor,
+                        currencyCode = currencyCode,
+                        type = TransactionType.INCOME,
+                        modifier = Modifier.weight(1f),
                     )
-                    Spacer(Modifier.height(14.dp))
-                    Row(modifier = Modifier.fillMaxWidth()) {
-                        OverviewSecondary(
-                            label = "收入",
-                            amountMinor = figures.incomeMinor,
-                            currencyCode = currencyCode,
-                            modifier = Modifier.weight(1f),
-                        )
-                        OverviewSecondary(
-                            label = "支出",
-                            amountMinor = figures.expenseMinor,
-                            currencyCode = currencyCode,
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
+                    OverviewSecondary(
+                        label = "支出",
+                        amountMinor = figures.expenseMinor,
+                        currencyCode = currencyCode,
+                        type = TransactionType.EXPENSE,
+                        modifier = Modifier.weight(1f),
+                    )
                 }
             }
         }
@@ -419,18 +421,20 @@ private fun OverviewSecondary(
     label: String,
     amountMinor: Long,
     currencyCode: String,
+    type: TransactionType,
     modifier: Modifier = Modifier,
 ) {
+    val tones = LocalLedgerTones.current
     Column(modifier = modifier) {
         Text(
             label,
             style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f),
+            color = tones.heroMuted,
         )
         Text(
             MoneyFormatter.format(amountMinor, currencyCode),
             style = MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = "tnum"),
-            color = MaterialTheme.colorScheme.onPrimary,
+            color = amountColor(type),
         )
     }
 }
@@ -439,9 +443,9 @@ private fun OverviewSecondary(
 fun SectionTitle(text: String, modifier: Modifier = Modifier) {
     Text(
         text,
-        style = MaterialTheme.typography.titleMedium,
-        color = MaterialTheme.colorScheme.onSurface,
-        modifier = modifier.padding(top = 18.dp, bottom = 8.dp),
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = modifier.padding(top = 22.dp, bottom = 10.dp),
     )
 }
 
@@ -480,7 +484,7 @@ fun BudgetProgressRow(
     LaunchedEffect(line.id) { started = true }
     val animated by animateFloatAsState(
         targetValue = if (started) fraction else 0f,
-        animationSpec = tween(durationMillis = 700),
+        animationSpec = LedgerMotion.medium(),
         label = "budget-progress",
     )
     val barColor = amountColor(if (line.overspent) TransactionType.EXPENSE else TransactionType.INCOME)

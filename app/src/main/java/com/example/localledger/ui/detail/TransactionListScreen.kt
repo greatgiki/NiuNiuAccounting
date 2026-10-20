@@ -3,6 +3,7 @@ package com.example.localledger.ui.detail
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,9 +18,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
@@ -46,6 +50,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -54,8 +60,10 @@ import com.example.localledger.domain.model.CategoryType
 import com.example.localledger.domain.model.TransactionType
 import com.example.localledger.ui.AppSession
 import com.example.localledger.ui.common.DateTimeFormatters
+import com.example.localledger.ui.common.UiOutcome
 import com.example.localledger.ui.common.MoneyFormatter
 import com.example.localledger.ui.component.ConfirmDeleteDialog
+import com.example.localledger.ui.component.LedgerSnackbarHost
 import com.example.localledger.ui.component.EmptyState
 import com.example.localledger.ui.component.ErrorState
 import com.example.localledger.ui.component.LoadingState
@@ -84,19 +92,35 @@ fun TransactionListScreen(
     var deleteTarget by remember { mutableStateOf<String?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
     val deleteGate = remember { SubmitGate() }
+    val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val hasFilter by remember {
         derivedStateOf { !state.filter.isEmpty || state.keyword.isNotBlank() }
     }
+    val zoneId = remember { ZoneId.systemDefault() }
 
     LaunchedEffect(Unit) {
         viewModel.effects.collect { effect ->
             when (effect) {
                 is TransactionListEffect.ShowMessage -> message = effect.message
+                TransactionListEffect.OfferUndo -> {
+                    val result = snackbarHostState.showSnackbar(
+                        message = "已删除这条流水",
+                        actionLabel = "撤销",
+                        duration = SnackbarDuration.Long,
+                    )
+                    if (result == SnackbarResult.ActionPerformed) {
+                        when (val outcome = viewModel.undoDelete()) {
+                            is UiOutcome.Failure -> message = outcome.message
+                            UiOutcome.Success -> Unit
+                        }
+                    }
+                }
             }
         }
     }
 
+    Box(modifier = Modifier.fillMaxSize()) {
     Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         PendingDraftBanner(navController)
         Row(
@@ -107,14 +131,14 @@ fun TransactionListScreen(
                 value = state.keyword,
                 onValueChange = viewModel::onKeywordChange,
                 placeholder = { Text("搜索备注") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = "搜索") },
                 singleLine = true,
                 modifier = Modifier
                     .weight(1f)
                     .semantics { contentDescription = "搜索备注" },
             )
             IconButton(onClick = { showFilterSheet = true }) {
-                Icon(Icons.Default.FilterList, contentDescription = "筛选")
+                Icon(Icons.Outlined.FilterList, contentDescription = "筛选")
             }
         }
 
@@ -169,7 +193,12 @@ fun TransactionListScreen(
                     { navController.navigate(Routes.transactionNew()) }
                 },
             )
-            else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
+            else -> LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .testTag("transaction-list")
+                    .semantics { testTagsAsResourceId = true },
+            ) {
                 state.groups.forEach { group ->
                     stickyHeader(key = "header-${group.date}", contentType = "day-header") {
                         val currency = session.currentLedgerCurrency
@@ -198,8 +227,17 @@ fun TransactionListScreen(
                         key = { it.transaction.id },
                         contentType = { "transaction" },
                     ) { detail ->
+                        val transactionId = detail.transaction.id
+                        val open = remember(transactionId) {
+                            {
+                                navController.navigate(Routes.transactionEdit(transactionId))
+                            }
+                        }
+                        val askDelete = remember(transactionId) {
+                            { deleteTarget = transactionId }
+                        }
                         SwipeToDeleteRow(
-                            onDeleteRequest = { deleteTarget = detail.transaction.id },
+                            onDeleteRequest = askDelete,
                             modifier = Modifier.animateItem(),
                         ) {
                             TransactionRowContent(
@@ -209,15 +247,11 @@ fun TransactionListScreen(
                                 currencyCode = detail.accountCurrencyCode,
                                 type = detail.transaction.type,
                                 timeMillis = detail.transaction.transactionAt,
-                                zoneId = ZoneId.systemDefault(),
+                                zoneId = zoneId,
                                 iconKey = detail.categoryIconKey,
                                 modifier = Modifier.combinedClickable(
-                                    onClick = {
-                                        navController.navigate(
-                                            Routes.transactionEdit(detail.transaction.id),
-                                        )
-                                    },
-                                    onLongClick = { deleteTarget = detail.transaction.id },
+                                    onClick = open,
+                                    onLongClick = askDelete,
                                 ),
                             )
                         }
@@ -235,6 +269,11 @@ fun TransactionListScreen(
             }
         }
     }
+        LedgerSnackbarHost(
+            snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp),
+        )
+    }
 
     if (showFilterSheet) {
         FilterSheet(
@@ -250,7 +289,7 @@ fun TransactionListScreen(
     deleteTarget?.let { targetId ->
         ConfirmDeleteDialog(
             title = "删除这条记录？",
-            message = "删除后无法恢复，相关账户余额和统计会立即更新。",
+            message = "删除后可在底部提示中撤销。账户余额和统计会立即更新。",
             confirmLabel = "删除",
             submitting = deleteGate.submitting,
             errorMessage = deleteGate.error,
@@ -284,7 +323,7 @@ private fun RemovableFilterChip(text: String, onRemove: () -> Unit) {
         label = { Text(text, style = MaterialTheme.typography.bodySmall) },
         trailingIcon = {
             Icon(
-                Icons.Default.Close,
+                Icons.Outlined.Close,
                 contentDescription = "移除$text",
                 modifier = Modifier.size(16.dp),
             )

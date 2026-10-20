@@ -10,6 +10,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
+import com.example.localledger.data.local.database.DatabaseProvider
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import com.example.localledger.benchmark.BenchmarkFlags
+import com.example.localledger.benchmark.BenchmarkSeed
 import com.example.localledger.notification.PendingNavigation
 import com.example.localledger.ui.AppSession
 import com.example.localledger.ui.navigation.AppNavHost
@@ -27,10 +33,22 @@ import javax.inject.Inject
 class MainActivity : ComponentActivity() {
     @Inject lateinit var appSession: AppSession
     @Inject lateinit var pendingNavigation: PendingNavigation
+    @Inject lateinit var databaseProvider: DatabaseProvider
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
+        if (com.example.localledger.BuildConfig.SEED_DEMO) {
+            val count = intent?.getIntExtra(BenchmarkSeed.EXTRA_SEED_COUNT, 0) ?: 0
+            if (count > 0) {
+                BenchmarkFlags.seedCount = count
+                BenchmarkFlags.expandedTransactionList = true
+                lifecycleScope.launch {
+                    appSession.state.first { it.isReady }
+                    BenchmarkSeed.seedIfRequested(databaseProvider)
+                }
+            }
+        }
         splashScreen.setKeepOnScreenCondition {
             val session = appSession.state.value
             val failed = session.initialization is InitializationState.Error || session.ledgerError != null
