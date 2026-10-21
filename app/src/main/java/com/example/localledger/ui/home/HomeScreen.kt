@@ -1,7 +1,6 @@
 package com.example.localledger.ui.home
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -9,33 +8,45 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
-import androidx.compose.material.icons.outlined.ArrowDropDown
-import androidx.compose.foundation.border
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -48,11 +59,19 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -93,77 +112,33 @@ fun HomeScreen(
     val scope = rememberCoroutineScope()
     val selectTopLevelPage = LocalSelectTopLevelPage.current
     var showLedgerPicker by remember { mutableStateOf(false) }
+    val openLedgerPicker = remember { { showLedgerPicker = true } }
 
     when {
         state.isLoading -> LoadingState()
         state.error != null -> ErrorState(state.error ?: "读取本地数据失败", onRetry = viewModel::retry)
         else -> LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .homeSafeInsets(),
+            contentPadding = HomeListPadding,
         ) {
-            item(key = "header") {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    TextButton(onClick = { showLedgerPicker = true }) {
-                        Text(
-                            state.ledgerName.ifEmpty { "选择账本" },
-                            style = MaterialTheme.typography.titleLarge,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Icon(
-                            Icons.Outlined.ArrowDropDown,
-                            contentDescription = "切换账本",
-                        )
-                    }
-                }
-            }
-            item(key = "month") {
-                Row(
-                    modifier = Modifier.fillMaxWidth().claimPagerHorizontalGesture(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    IconButton(onClick = viewModel::previousMonth) {
-                        Icon(
-                            Icons.AutoMirrored.Outlined.KeyboardArrowLeft,
-                            contentDescription = "上一月",
-                        )
-                    }
-                    Spacer(Modifier.weight(1f))
-                    AnimatedContent(
-                        targetState = state.yearMonth,
-                        transitionSpec = {
-                            val forward = targetState > initialState
-                            val enter = slideInVertically { if (forward) it / 2 else -it / 2 } + fadeIn()
-                            val exit = slideOutVertically { if (forward) -it / 2 else it / 2 } + fadeOut()
-                            enter togetherWith exit
-                        },
-                        label = "home-month",
-                    ) { month ->
-                        Text(
-                            DateTimeFormatters.yearMonth(month),
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                    }
-                    Spacer(Modifier.weight(1f))
-                    IconButton(onClick = viewModel::nextMonth) {
-                        Icon(
-                            Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-                            contentDescription = "下一月",
-                        )
-                    }
-                }
-            }
-            item(key = "drafts") {
-                PendingDraftBanner(navController)
-            }
-            item(key = "summary") {
-                MonthOverviewCard(
+            item(key = "top", contentType = "home-top") {
+                HomeTopSection(
+                    ledgerName = state.ledgerName,
                     yearMonth = state.yearMonth,
                     incomeMinor = state.incomeMinor,
                     expenseMinor = state.expenseMinor,
                     currencyCode = state.currencyCode,
+                    onLedgerClick = openLedgerPicker,
+                    onPreviousMonth = viewModel::previousMonth,
+                    onNextMonth = viewModel::nextMonth,
+                )
+            }
+            item(key = "drafts", contentType = "drafts") {
+                PendingDraftBanner(
+                    navController,
+                    modifier = Modifier.padding(top = 8.dp),
                 )
             }
             item(key = "budget-title") {
@@ -291,7 +266,6 @@ fun HomeScreen(
                     }
                 }
             }
-            item(key = "bottom-space") { Spacer(Modifier.height(24.dp)) }
         }
     }
 
@@ -344,76 +318,316 @@ fun HomeScreen(
     }
 }
 
+internal val HomeListPadding = PaddingValues(
+    start = 16.dp,
+    top = 16.dp,
+    end = 16.dp,
+    bottom = 24.dp,
+)
+
+/** Status bar and display cutout still left after the scaffold padding is consumed. */
+@Composable
+internal fun Modifier.homeSafeInsets(
+    insets: WindowInsets = WindowInsets.safeDrawing,
+): Modifier = this.windowInsetsPadding(
+    insets.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
+)
+
+@Composable
+internal fun HomeTopSection(
+    ledgerName: String,
+    yearMonth: YearMonth,
+    incomeMinor: Long,
+    expenseMinor: Long,
+    currencyCode: String,
+    onLedgerClick: () -> Unit,
+    onPreviousMonth: () -> Unit,
+    onNextMonth: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier.fillMaxWidth()) {
+        LedgerSelector(ledgerName = ledgerName, onClick = onLedgerClick)
+        Spacer(Modifier.height(16.dp))
+        MonthOverviewCard(
+            yearMonth = yearMonth,
+            incomeMinor = incomeMinor,
+            expenseMinor = expenseMinor,
+            currencyCode = currencyCode,
+            onPreviousMonth = onPreviousMonth,
+            onNextMonth = onNextMonth,
+        )
+    }
+}
+
+@Composable
+private fun LedgerSelector(ledgerName: String, onClick: () -> Unit) {
+    val shown = ledgerName.ifEmpty { "选择账本" }
+    val color = MaterialTheme.colorScheme.onSurfaceVariant
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .testTag("home-ledger")
+                .widthIn(max = maxWidth)
+                .heightIn(min = 48.dp)
+                .clip(MaterialTheme.shapes.small)
+                .clickable(onClick = onClick, role = Role.Button, onClickLabel = "切换账本"),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                shown,
+                style = MaterialTheme.typography.titleSmall,
+                color = color,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            Icon(
+                Icons.Outlined.KeyboardArrowDown,
+                contentDescription = null,
+                modifier = Modifier.padding(start = 4.dp).size(20.dp),
+                tint = color,
+            )
+        }
+    }
+}
+
 @Composable
 fun MonthOverviewCard(
     yearMonth: YearMonth,
     incomeMinor: Long,
     expenseMinor: Long,
     currencyCode: String,
+    onPreviousMonth: () -> Unit,
+    onNextMonth: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val tones = LocalLedgerTones.current
     val shape = MaterialTheme.shapes.extraLarge
-    val heroBrush = remember(tones) {
+    val heroBrush = remember(tones.heroTop, tones.heroBottom) {
         Brush.verticalGradient(listOf(tones.heroTop, tones.heroBottom))
+    }
+    val border = remember(tones.accent) { tones.accent.copy(alpha = 0.45f) }
+    val rule = remember(tones.accent) { tones.accent.copy(alpha = 0.32f) }
+    val figures = remember(yearMonth, incomeMinor, expenseMinor) {
+        MonthFigures(yearMonth, incomeMinor, expenseMinor)
     }
     Column(
         modifier = modifier
             .fillMaxWidth()
             .clip(shape)
-            .border(0.5.dp, tones.accent.copy(alpha = 0.45f), shape)
-            .background(heroBrush)
-            .padding(horizontal = 22.dp, vertical = 24.dp),
+            .border(0.5.dp, border, shape)
+            .background(heroBrush),
     ) {
-        Text(
-            "本月结余",
-            style = MaterialTheme.typography.labelLarge,
-            color = tones.heroMuted,
+        MonthSwitcher(
+            yearMonth = yearMonth,
+            ink = tones.heroInk,
+            onPreviousMonth = onPreviousMonth,
+            onNextMonth = onNextMonth,
         )
+        MonthFiguresBlock(
+            figures = figures,
+            currencyCode = currencyCode,
+            rule = rule,
+        )
+    }
+}
+
+@Composable
+private fun MonthSwitcher(
+    yearMonth: YearMonth,
+    ink: Color,
+    onPreviousMonth: () -> Unit,
+    onNextMonth: () -> Unit,
+) {
+    val iconColors = IconButtonDefaults.iconButtonColors(contentColor = ink)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 8.dp, top = 8.dp, end = 8.dp)
+            .claimPagerHorizontalGesture(),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onPreviousMonth, colors = iconColors) {
+            Icon(
+                Icons.AutoMirrored.Outlined.KeyboardArrowLeft,
+                contentDescription = "上一月",
+                modifier = Modifier.size(22.dp),
+            )
+        }
         AnimatedContent(
-            targetState = MonthFigures(yearMonth, incomeMinor, expenseMinor),
+            targetState = yearMonth,
+            modifier = Modifier.widthIn(min = 144.dp),
+            contentAlignment = Alignment.Center,
             transitionSpec = {
-                val forward = targetState.yearMonth >= initialState.yearMonth
+                val forward = targetState > initialState
                 val enter = slideInVertically(LedgerMotion.medium()) { if (forward) it / 2 else -it / 2 } +
                     fadeIn(LedgerMotion.short())
                 val exit = slideOutVertically(LedgerMotion.medium()) { if (forward) -it / 2 else it / 2 } +
                     fadeOut(LedgerMotion.short())
                 enter togetherWith exit
             },
-            label = "month-figures",
-        ) { figures ->
-            Column {
-                Text(
-                    MoneyFormatter.format(figures.incomeMinor - figures.expenseMinor, currencyCode),
-                    style = MaterialTheme.typography.displaySmall,
-                    color = tones.accent,
-                )
-                Spacer(Modifier.height(16.dp))
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    OverviewSecondary(
-                        label = "收入",
-                        amountMinor = figures.incomeMinor,
-                        currencyCode = currencyCode,
-                        type = TransactionType.INCOME,
-                        modifier = Modifier.weight(1f),
-                    )
-                    OverviewSecondary(
-                        label = "支出",
-                        amountMinor = figures.expenseMinor,
-                        currencyCode = currencyCode,
-                        type = TransactionType.EXPENSE,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
+            label = "home-month",
+        ) { month ->
+            Text(
+                DateTimeFormatters.yearMonth(month),
+                modifier = Modifier.testTag("home-month"),
+                style = MaterialTheme.typography.headlineSmall.copy(fontFeatureSettings = "tnum"),
+                color = ink,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                softWrap = false,
+            )
+        }
+        IconButton(onClick = onNextMonth, colors = iconColors) {
+            Icon(
+                Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                contentDescription = "下一月",
+                modifier = Modifier.size(22.dp),
+            )
         }
     }
 }
 
+@Composable
+private fun MonthFiguresBlock(
+    figures: MonthFigures,
+    currencyCode: String,
+    rule: Color,
+) {
+    val tones = LocalLedgerTones.current
+    val balanceText = MoneyFormatter.format(figures.incomeMinor - figures.expenseMinor, currencyCode)
+    val empty = figures.incomeMinor == 0L && figures.expenseMinor == 0L
+    Column(modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 24.dp)) {
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "本月结余",
+            style = MaterialTheme.typography.labelLarge,
+            color = tones.heroMuted,
+        )
+        Spacer(Modifier.height(8.dp))
+        AnimatedAmount(
+            text = balanceText,
+            yearMonth = figures.yearMonth,
+            style = heroAmountStyle(balanceText),
+            color = tones.accent,
+            alignEnd = false,
+            modifier = Modifier
+                .testTag("home-balance")
+                .fillMaxWidth(),
+        )
+        Spacer(Modifier.height(16.dp))
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(0.5.dp)
+                .background(rule),
+        )
+        Spacer(Modifier.height(16.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            OverviewSecondary(
+                label = "收入",
+                amountMinor = figures.incomeMinor,
+                currencyCode = currencyCode,
+                type = TransactionType.INCOME,
+                yearMonth = figures.yearMonth,
+                alignEnd = false,
+                testTag = "home-income",
+                modifier = Modifier.weight(1f),
+            )
+            Box(
+                Modifier
+                    .padding(horizontal = 16.dp)
+                    .width(0.5.dp)
+                    .height(32.dp)
+                    .background(rule),
+            )
+            OverviewSecondary(
+                label = "支出",
+                amountMinor = figures.expenseMinor,
+                currencyCode = currencyCode,
+                type = TransactionType.EXPENSE,
+                yearMonth = figures.yearMonth,
+                alignEnd = true,
+                testTag = "home-expense",
+                modifier = Modifier.weight(1f),
+            )
+        }
+        if (empty) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "本月还没有收支",
+                modifier = Modifier
+                    .testTag("home-empty")
+                    .fillMaxWidth(),
+                style = MaterialTheme.typography.bodySmall,
+                color = tones.heroMuted,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+@Immutable
 private data class MonthFigures(
     val yearMonth: YearMonth,
     val incomeMinor: Long,
     val expenseMinor: Long,
+)
+
+@Composable
+private fun AnimatedAmount(
+    text: String,
+    yearMonth: YearMonth,
+    style: TextStyle,
+    color: Color,
+    alignEnd: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    AnimatedContent(
+        targetState = yearMonth to text,
+        modifier = modifier,
+        contentAlignment = if (alignEnd) Alignment.CenterEnd else Alignment.CenterStart,
+        transitionSpec = {
+            val forward = targetState.first >= initialState.first
+            val enter = slideInVertically(LedgerMotion.medium()) { if (forward) it / 2 else -it / 2 } +
+                fadeIn(LedgerMotion.short())
+            val exit = slideOutVertically(LedgerMotion.medium()) { if (forward) -it / 2 else it / 2 } +
+                fadeOut(LedgerMotion.short())
+            enter togetherWith exit
+        },
+        label = "amount",
+    ) { (_, value) ->
+        Text(
+            value,
+            style = style,
+            color = color,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = if (alignEnd) TextAlign.End else TextAlign.Start,
+        )
+    }
+}
+
+@Composable
+private fun heroAmountStyle(text: String): TextStyle {
+    val typography = MaterialTheme.typography
+    return when {
+        text.length <= 10 -> typography.displayMedium
+        text.length <= 12 -> typography.displaySmall
+        text.length <= 16 -> typography.headlineMedium.asHeroNumber((-0.4).sp)
+        else -> typography.headlineSmall.asHeroNumber((-0.3).sp)
+    }
+}
+
+private fun TextStyle.asHeroNumber(tracking: TextUnit): TextStyle = copy(
+    fontWeight = FontWeight.Light,
+    letterSpacing = tracking,
+    fontFeatureSettings = "tnum",
 )
 
 @Composable
@@ -422,21 +636,42 @@ private fun OverviewSecondary(
     amountMinor: Long,
     currencyCode: String,
     type: TransactionType,
+    yearMonth: YearMonth,
+    alignEnd: Boolean,
+    testTag: String,
     modifier: Modifier = Modifier,
 ) {
     val tones = LocalLedgerTones.current
-    Column(modifier = modifier) {
+    val alignment = if (alignEnd) Alignment.End else Alignment.Start
+    val amount = MoneyFormatter.format(amountMinor, currencyCode)
+    Column(modifier = modifier, horizontalAlignment = alignment) {
         Text(
             label,
             style = MaterialTheme.typography.labelMedium,
             color = tones.heroMuted,
+            textAlign = if (alignEnd) TextAlign.End else TextAlign.Start,
         )
-        Text(
-            MoneyFormatter.format(amountMinor, currencyCode),
-            style = MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = "tnum"),
-            color = amountColor(type),
+        Spacer(Modifier.height(8.dp))
+        AnimatedAmount(
+            text = amount,
+            yearMonth = yearMonth,
+            style = secondaryAmountStyle(amount),
+            color = if (amountMinor == 0L) tones.heroMuted else amountColor(type),
+            alignEnd = alignEnd,
+            modifier = Modifier.testTag(testTag),
         )
     }
+}
+
+@Composable
+private fun secondaryAmountStyle(text: String): TextStyle {
+    val typography = MaterialTheme.typography
+    val base = when {
+        text.length <= 10 -> typography.titleLarge
+        text.length <= 12 -> typography.titleMedium
+        else -> typography.bodyMedium
+    }
+    return base.copy(fontFeatureSettings = "tnum", letterSpacing = (-0.15).sp)
 }
 
 @Composable
@@ -544,16 +779,54 @@ fun BudgetProgressRow(
     }
 }
 
-@Preview(showBackground = true, widthDp = 360)
+@Preview(name = "首页顶部", showBackground = true, widthDp = 360, backgroundColor = 0xFFF4EFE6)
+@Preview(
+    name = "首页顶部 · 深色",
+    showBackground = true,
+    widthDp = 360,
+    backgroundColor = 0xFF101216,
+    uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES,
+)
 @Composable
-private fun MonthOverviewCardPreview() {
+private fun HomeTopPreview() {
     LocalLedgerTheme {
-        Column(Modifier.padding(16.dp)) {
-            MonthOverviewCard(
+        Column(
+            Modifier
+                .background(MaterialTheme.colorScheme.background)
+                .padding(HomeListPadding),
+        ) {
+            HomeTopSection(
+                ledgerName = "日常账本",
                 yearMonth = YearMonth.of(2026, 10),
                 incomeMinor = 1_280_000,
-                expenseMinor = 436_50,
+                expenseMinor = 43_650,
                 currencyCode = "CNY",
+                onLedgerClick = {},
+                onPreviousMonth = {},
+                onNextMonth = {},
+            )
+        }
+    }
+}
+
+@Preview(name = "首页顶部 · 空", showBackground = true, widthDp = 360, backgroundColor = 0xFFF4EFE6)
+@Composable
+private fun HomeTopEmptyPreview() {
+    LocalLedgerTheme {
+        Column(
+            Modifier
+                .background(MaterialTheme.colorScheme.background)
+                .padding(HomeListPadding),
+        ) {
+            HomeTopSection(
+                ledgerName = "",
+                yearMonth = YearMonth.of(2026, 10),
+                incomeMinor = 0,
+                expenseMinor = 0,
+                currencyCode = "CNY",
+                onLedgerClick = {},
+                onPreviousMonth = {},
+                onNextMonth = {},
             )
         }
     }

@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
@@ -203,6 +204,9 @@ fun AppNavHost(appSession: AppSession, pendingNavigation: PendingNavigation) {
                 startDestination = Routes.MAIN,
                 modifier = Modifier
                     .padding(padding)
+                    // Scaffold already applied these insets. Consuming them keeps
+                    // nested bars from adding a second status-bar gap.
+                    .consumeWindowInsets(padding)
                     .background(MaterialTheme.colorScheme.background),
                 enterTransition = {
                     slideInHorizontally(tabSwitchTween()) { it } + fadeIn(tabSwitchTween())
