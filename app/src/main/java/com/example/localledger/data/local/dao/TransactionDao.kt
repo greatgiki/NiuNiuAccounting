@@ -43,6 +43,31 @@ interface TransactionDao {
 
     @Query(
         """
+        SELECT t.*,
+            source.name AS account_name,
+            destination.name AS to_account_name,
+            c.name AS category_name,
+            c.icon_key AS category_icon_key,
+            source.currency_code AS account_currency_code,
+            destination.currency_code AS to_account_currency_code
+        FROM transactions t
+        JOIN accounts source ON source.id = t.account_id
+        LEFT JOIN accounts destination ON destination.id = t.to_account_id
+        LEFT JOIN categories c ON c.id = t.category_id
+        WHERE t.ledger_id = :ledgerId
+          AND t.transaction_at >= :startInclusive
+          AND t.transaction_at < :endExclusive
+        ORDER BY t.transaction_at ASC, t.created_at ASC
+        """,
+    )
+    suspend fun listDetailsInRange(
+        ledgerId: String,
+        startInclusive: Long,
+        endExclusive: Long,
+    ): List<TransactionDetailRow>
+
+    @Query(
+        """
         SELECT external_source, external_id
         FROM transactions
         WHERE ledger_id = :ledgerId AND external_id IS NOT NULL AND external_source IS NOT NULL

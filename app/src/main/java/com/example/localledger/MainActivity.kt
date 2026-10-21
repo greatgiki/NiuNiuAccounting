@@ -2,6 +2,7 @@ package com.example.localledger
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -17,7 +18,10 @@ import kotlinx.coroutines.launch
 import com.example.localledger.benchmark.BenchmarkFlags
 import com.example.localledger.benchmark.BenchmarkSeed
 import com.example.localledger.notification.PendingNavigation
+import com.example.localledger.security.AppLockController
+import com.example.localledger.security.AppLockState
 import com.example.localledger.ui.AppSession
+import com.example.localledger.ui.lock.LockGate
 import com.example.localledger.ui.navigation.AppNavHost
 import com.example.localledger.ui.navigation.Routes
 import com.example.localledger.ui.startup.DataLossNoticeScreen
@@ -26,7 +30,6 @@ import com.example.localledger.ui.startup.InitializationLoadingScreen
 import com.example.localledger.ui.theme.LocalLedgerTheme
 import com.example.localledger.core.storage.InitializationState
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -34,6 +37,7 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var appSession: AppSession
     @Inject lateinit var pendingNavigation: PendingNavigation
     @Inject lateinit var databaseProvider: DatabaseProvider
+    @Inject lateinit var appLockController: AppLockController
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val splashScreen = installSplashScreen()
@@ -52,12 +56,22 @@ class MainActivity : ComponentActivity() {
         splashScreen.setKeepOnScreenCondition {
             val session = appSession.state.value
             val failed = session.initialization is InitializationState.Error || session.ledgerError != null
-            !session.isReady && !failed
+            val lockPending = appLockController.state.value.phase == AppLockState.Phase.Unknown
+            (!session.isReady && !failed) || (session.isReady && lockPending)
         }
         enableEdgeToEdge()
+        if (appLockController.isLockConfigured()) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
+        lifecycleScope.launch {
+            appLockController.state.collect { state ->
+                if (state.hasPin) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            }
+        }
         handleIntent(intent)
         setContent {
-            LocalLedgerApp(appSession, pendingNavigation)
+            LocalLedgerApp(appSession, pendingNavigation, appLockController)
         }
     }
 
@@ -79,7 +93,11 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun LocalLedgerApp(appSession: AppSession, pendingNavigation: PendingNavigation) {
+fun LocalLedgerApp(
+    appSession: AppSession,
+    pendingNavigation: PendingNavigation,
+    appLock: AppLockController,
+) {
     val session by appSession.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
 
@@ -100,10 +118,14 @@ fun LocalLedgerApp(appSession: AppSession, pendingNavigation: PendingNavigation)
                     else -> InitializationLoadingScreen()
                 }
             }
-            session.showDataLossNotice -> DataLossNoticeScreen(
-                onAcknowledge = { scope.launch { appSession.acknowledgeDataLoss() } },
-            )
-            else -> AppNavHost(appSession = appSession, pendingNavigation = pendingNavigation)
+            else -> LockGate(appLock) {
+                when {
+                    session.showDataLossNotice -> DataLossNoticeScreen(
+                        onAcknowledge = { scope.launch { appSession.acknowledgeDataLoss() } },
+                    )
+                    else -> AppNavHost(appSession = appSession, pendingNavigation = pendingNavigation)
+                }
+            }
         }
     }
 }
