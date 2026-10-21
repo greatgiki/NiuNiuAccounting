@@ -212,9 +212,61 @@ class WalletMigrationTest {
         migrated.close()
     }
 
+    @Test
+    fun migrate4To5KeepsDraftsAndBackfillsNotificationKey() {
+        helper.createDatabase(DRAFT_DB, 4).apply {
+            execSQL(
+                """
+                INSERT INTO ledgers (id, name, currency_code, created_at, is_archived)
+                VALUES ('ledger', '日常', 'CNY', 1, 0)
+                """.trimIndent(),
+            )
+            execSQL(
+                """
+                INSERT INTO accounts (
+                  id, ledger_id, name, type, initial_balance_minor, sort_order, is_archived,
+                  created_at, updated_at, currency_code
+                ) VALUES ('cash', 'ledger', '现金', 'CASH', 0, 0, 0, 1, 1, 'CNY')
+                """.trimIndent(),
+            )
+            execSQL(
+                """
+                INSERT INTO categories (id, ledger_id, name, type, icon_key, sort_order, is_archived, created_at, updated_at)
+                VALUES ('food', 'ledger', '餐饮', 'EXPENSE', 'restaurant', 0, 0, 1, 1)
+                """.trimIndent(),
+            )
+            execSQL(
+                """
+                INSERT INTO pending_drafts (
+                  id, ledger_id, source, type, amount_minor, counterparty, note, raw_text,
+                  category_id, account_id, transaction_at, status, transaction_id, notification_key,
+                  likely_duplicate, created_at, updated_at
+                ) VALUES (
+                  'draft', 'ledger', 'WECHAT', 'EXPENSE', 1250, '美团', NULL, '微信支付 已支付¥12.50',
+                  'food', 'cash', 20, 'PENDING', NULL, '0|com.tencent.mm|7|wx|u0',
+                  0, 20, 20
+                )
+                """.trimIndent(),
+            )
+            close()
+        }
+        val migrated = helper.runMigrationsAndValidate(DRAFT_DB, 5, true, *WalletDatabase.MIGRATIONS)
+        migrated.query(
+            "SELECT needs_amount, sbn_key, group_key, amount_minor FROM pending_drafts WHERE id = 'draft'",
+        ).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(0, cursor.getInt(0))
+            assertEquals("0|com.tencent.mm|7|wx|u0", cursor.getString(1))
+            assertTrue(cursor.isNull(2))
+            assertEquals(1250L, cursor.getLong(3))
+        }
+        migrated.close()
+    }
+
     private companion object {
         const val TEST_DB = "migration-test"
         const val HISTORY_DB = "migration-history"
         const val IMPORT_DB = "migration-import"
+        const val DRAFT_DB = "migration-draft"
     }
 }

@@ -26,12 +26,12 @@ class DraftNotifier @Inject constructor(
         if (!canNotify()) return
         ensureChannel()
         val typeLabel = if (result.type == TransactionType.INCOME) "收入" else "支出"
-        val amount = MoneyFormatter.format(result.amountMinor)
+        val amount = if (result.needsAmount) "需补全金额" else MoneyFormatter.format(result.amountMinor)
         val who = result.counterparty.ifBlank { result.source.label() }
-        val body = if (result.autoConfirmed) {
-            "已自动记一笔$typeLabel $amount · $who"
-        } else {
-            "$typeLabel $amount · $who，点按确认或修改"
+        val body = when {
+            result.needsAmount -> "$typeLabel · 需补全金额 · $who，打开应用补上金额后再确认"
+            result.autoConfirmed -> "已自动记一笔$typeLabel $amount · $who"
+            else -> "$typeLabel $amount · $who，点按确认或修改"
         }
         val open = pendingActivity(result.draftId.hashCode())
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
@@ -41,11 +41,51 @@ class DraftNotifier @Inject constructor(
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setContentIntent(open)
             .setAutoCancel(true)
+        if (!result.autoConfirmed && !result.needsAmount) {
+            builder.addAction(com.example.localledger.R.drawable.ic_stat_ledger, "确认", pendingBroadcast(DraftActionReceiver.ACTION_CONFIRM, result.draftId))
+            builder.addAction(com.example.localledger.R.drawable.ic_stat_ledger, "忽略", pendingBroadcast(DraftActionReceiver.ACTION_DISMISS, result.draftId))
+        }
+        notifyIfAllowed(result.draftId.hashCode(), builder.build())
+    }
+
+    fun showEnriched(result: NotificationRecordResult.Enriched) {
+        if (!canNotify()) return
+        ensureChannel()
+        val typeLabel = if (result.type == TransactionType.INCOME) "收入" else "支出"
+        val amount = MoneyFormatter.format(result.amountMinor)
+        val who = result.counterparty.ifBlank { result.source.label() }
+        val body = if (result.autoConfirmed) {
+            "已补全金额并自动记一笔$typeLabel $amount · $who"
+        } else {
+            "已补全金额，$typeLabel $amount · $who，点按确认或修改"
+        }
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(com.example.localledger.R.drawable.ic_stat_ledger)
+            .setContentTitle(if (result.autoConfirmed) "已自动记账" else "待确认记账")
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setContentIntent(pendingActivity(result.draftId.hashCode()))
+            .setAutoCancel(true)
         if (!result.autoConfirmed) {
             builder.addAction(com.example.localledger.R.drawable.ic_stat_ledger, "确认", pendingBroadcast(DraftActionReceiver.ACTION_CONFIRM, result.draftId))
             builder.addAction(com.example.localledger.R.drawable.ic_stat_ledger, "忽略", pendingBroadcast(DraftActionReceiver.ACTION_DISMISS, result.draftId))
         }
         notifyIfAllowed(result.draftId.hashCode(), builder.build())
+    }
+
+    fun showNeedAmount(draftId: String) {
+        if (!canNotify()) return
+        ensureChannel()
+        val body = "这笔待确认记账还缺金额，打开应用补上金额后再确认。"
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(com.example.localledger.R.drawable.ic_stat_ledger)
+            .setContentTitle("需要补全金额")
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setContentIntent(pendingActivity(draftId.hashCode()))
+            .setAutoCancel(true)
+            .build()
+        notifyIfAllowed(draftId.hashCode(), notification)
     }
 
     fun showNeedAssignment(draftId: String) {

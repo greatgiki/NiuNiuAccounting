@@ -17,15 +17,20 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -95,9 +100,26 @@ private fun DraftCard(
                     )
                 }
                 Text(
-                    (if (draft.type == TransactionType.INCOME) "+" else "-") + MoneyFormatter.format(draft.amountMinor),
+                    if (draft.needsAmount) {
+                        "需补全金额"
+                    } else {
+                        (if (draft.type == TransactionType.INCOME) "+" else "-") + MoneyFormatter.format(draft.amountMinor)
+                    },
                     style = MaterialTheme.typography.titleMedium,
+                    color = if (draft.needsAmount) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                 )
+            }
+            if (draft.needsAmount) {
+                var amountText by remember(draft.id) { mutableStateOf("") }
+                OutlinedTextField(
+                    value = amountText,
+                    onValueChange = { amountText = it },
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    label = { Text("补全金额（元）") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                )
+                TextButton(onClick = { viewModel.setAmount(draft.id, amountText) }) { Text("保存金额") }
             }
             if (draft.likelyDuplicate) {
                 Text("可能与已有流水重复", color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.labelMedium)
@@ -128,16 +150,20 @@ fun PendingDraftBanner(
     modifier: Modifier = Modifier,
     viewModel: PendingDraftBadgeViewModel = hiltViewModel(),
 ) {
-    val count by viewModel.count.collectAsStateWithLifecycle()
-    if (count <= 0) return
+    val badge by viewModel.badge.collectAsStateWithLifecycle()
+    if (badge.count <= 0) return
     Card(
         modifier = modifier.fillMaxWidth().padding(vertical = 8.dp),
         onClick = { navController.navigate(Routes.DRAFTS) },
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text("待确认 $count", style = MaterialTheme.typography.titleMedium)
+            Text("待确认 ${badge.count}", style = MaterialTheme.typography.titleMedium)
             Text(
-                "来自微信或支付宝通知，确认后才计入流水",
+                if (badge.needsAmount > 0) {
+                    "有 ${badge.needsAmount} 笔需补全金额，确认后才计入流水"
+                } else {
+                    "来自微信或支付宝通知，确认后才计入流水"
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

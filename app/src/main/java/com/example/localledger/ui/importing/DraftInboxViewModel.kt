@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.localledger.data.repository.DraftConfirmResult
 import com.example.localledger.data.repository.DraftRepository
 import com.example.localledger.data.repository.PendingDraft
+import com.example.localledger.domain.importing.BillAmounts
 import com.example.localledger.domain.model.Account
 import com.example.localledger.domain.model.Category
 import com.example.localledger.domain.model.CategoryType
@@ -81,7 +82,21 @@ class DraftInboxViewModel @Inject constructor(
             when (draftRepository.confirm(draft.id)) {
                 is DraftConfirmResult.Confirmed -> effects.emit("已记入流水")
                 DraftConfirmResult.MissingAssignment -> effects.emit("请先选择分类和账户")
+                DraftConfirmResult.NeedsAmount -> effects.emit("请先补全金额")
                 DraftConfirmResult.NotPending -> effects.emit("这条草稿已经处理过")
+            }
+        }
+    }
+
+    fun setAmount(draftId: String, raw: String) {
+        viewModelScope.launch {
+            val minor = BillAmounts.parseYuanToMinor(raw)
+            if (minor == null) {
+                effects.emit("请输入有效金额")
+                return@launch
+            }
+            if (draftRepository.updateAmount(draftId, minor)) {
+                effects.emit("金额已补全")
             }
         }
     }
@@ -91,18 +106,32 @@ class DraftInboxViewModel @Inject constructor(
     }
 }
 
+data class PendingDraftBadge(
+    val count: Int = 0,
+    val needsAmount: Int = 0,
+)
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class PendingDraftBadgeViewModel @Inject constructor(
     appSession: AppSession,
     draftRepository: DraftRepository,
 ) : ViewModel() {
-    val count: StateFlow<Int> = appSession.state
+    val badge: StateFlow<PendingDraftBadge> = appSession.state
         .map { it.currentLedgerId }
         .flatMapLatest { ledgerId ->
-            if (ledgerId == null) flowOf(0) else draftRepository.observePendingCount(ledgerId)
+            if (ledgerId == null) {
+                flowOf(PendingDraftBadge())
+            } else {
+                draftRepository.observePending(ledgerId).map { drafts ->
+                    PendingDraftBadge(
+                        count = drafts.size,
+                        needsAmount = drafts.count { it.needsAmount },
+                    )
+                }
+            }
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PendingDraftBadge())
 }
 
 fun draftCategories(draft: PendingDraft, state: DraftInboxUiState): List<Category> {
