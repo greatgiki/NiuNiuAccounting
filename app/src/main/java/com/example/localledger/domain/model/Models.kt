@@ -66,6 +66,7 @@ data class Transaction(
     val externalSource: String? = null,
     val externalId: String? = null,
     val origin: String = "MANUAL",
+    val counterparty: String? = null,
 )
 
 data class AccountBalance(
@@ -124,6 +125,10 @@ data class SaveTransactionCommand(
     val externalSource: String? = null,
     val externalId: String? = null,
     val origin: String? = null,
+    /** Null keeps the stored merchant on update. Blank clears it. */
+    val counterparty: String? = null,
+    /** New manual records set this when the user picked a category for a merchant. */
+    val rememberMerchantCategory: Boolean = false,
 )
 
 data class IncomeExpenseSummary(

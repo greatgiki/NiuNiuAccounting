@@ -8,7 +8,7 @@ import com.example.localledger.domain.model.TransactionType
 
 object BackupValidator {
     fun validate(document: BackupDocument, expectedSchema: Int = WALLET_SCHEMA_VERSION): BackupSummary {
-        if (document.formatVersion != BackupCodec.FORMAT_VERSION) {
+        if (document.formatVersion !in BackupCodec.MIN_FORMAT_VERSION..BackupCodec.FORMAT_VERSION) {
             fail("无法识别的备份格式，请更新牛牛记账后再试")
         }
         if (document.schemaVersion > expectedSchema) {
@@ -144,6 +144,19 @@ object BackupValidator {
             if (draft.status.isBlank()) fail("备份里有不完整的待确认")
             val key = draft.notificationKey
             if (key != null && !notificationKeys.add(key)) fail("备份里有重复的通知草稿")
+        }
+        uniqueIds(tables.merchantCategoryRules.map { it.id }, "商家分类")
+        val merchantKeys = HashSet<String>()
+        tables.merchantCategoryRules.forEach { rule ->
+            if (rule.ledgerId !in ledgerIds) fail("备份数据不完整：商家分类引用了不存在的账本")
+            if (rule.merchantKey.isBlank() || rule.merchantLabel.isBlank()) fail("备份里有不完整的商家分类")
+            if (rule.type != "EXPENSE" && rule.type != "INCOME") fail("备份里有无法识别的商家分类")
+            val category = categoriesById[rule.categoryId] ?: fail("备份数据不完整：商家分类引用了不存在的分类")
+            if (category.ledgerId != rule.ledgerId) fail("备份数据不完整：商家分类和分类不属于同一个账本")
+            if (category.type != rule.type) fail("备份数据不完整：商家分类和分类类型不一致")
+            if (!merchantKeys.add("${rule.ledgerId}|${rule.merchantKey}|${rule.type}")) {
+                fail("备份里有重复的商家分类")
+            }
         }
         return BackupSummary(
             schemaVersion = document.schemaVersion,

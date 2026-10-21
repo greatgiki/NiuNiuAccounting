@@ -33,6 +33,8 @@ data class AppSettings(
     val autoBackupEnabled: Boolean = false,
     val autoBackupTreeUri: String? = null,
     val autoBackupKeepCount: Int = 5,
+    /** When the app lock is on, the home-screen widget replaces amounts with dots. */
+    val widgetMaskAmountsWhenLocked: Boolean = true,
 ) {
     fun importAccountKey(ledgerId: String, source: String) = "$ledgerId|$source"
 

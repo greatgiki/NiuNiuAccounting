@@ -9,6 +9,7 @@ import com.example.localledger.data.local.entity.CategoryEntity
 import com.example.localledger.data.local.entity.ExchangeRateHistoryEntity
 import com.example.localledger.data.local.entity.ExchangeRateSnapshotEntity
 import com.example.localledger.data.local.entity.LedgerEntity
+import com.example.localledger.data.local.entity.MerchantCategoryRuleEntity
 import com.example.localledger.data.local.entity.PendingDraftEntity
 import com.example.localledger.data.local.entity.RecurringOccurrenceEntity
 import com.example.localledger.data.local.entity.RecurringRuleEntity
@@ -45,6 +46,12 @@ interface BackupDao {
 
     @Query("SELECT * FROM pending_drafts ORDER BY created_at ASC")
     suspend fun pendingDrafts(): List<PendingDraftEntity>
+
+    @Query("SELECT * FROM merchant_category_rules ORDER BY updated_at ASC")
+    suspend fun merchantCategoryRules(): List<MerchantCategoryRuleEntity>
+
+    @Query("DELETE FROM merchant_category_rules")
+    suspend fun deleteMerchantRules()
 
     @Query("DELETE FROM recurring_occurrences")
     suspend fun deleteOccurrences()
@@ -105,4 +112,7 @@ interface BackupDao {
 
     @Insert
     suspend fun insertDrafts(rows: List<PendingDraftEntity>)
+
+    @Insert
+    suspend fun insertMerchantRules(rows: List<MerchantCategoryRuleEntity>)
 }

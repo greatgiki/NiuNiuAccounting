@@ -82,13 +82,20 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
-        if (intent?.getBooleanExtra(EXTRA_OPEN_DRAFTS, false) == true) {
-            pendingNavigation.request(Routes.DRAFTS)
-        }
+        val route = routeFor(intent) ?: return
+        pendingNavigation.request(route)
     }
 
     companion object {
         const val EXTRA_OPEN_DRAFTS = "open_drafts"
+        const val EXTRA_OPEN_NEW_TRANSACTION = "open_new_transaction"
+
+        fun routeFor(intent: Intent?): String? {
+            if (intent == null) return null
+            if (intent.getBooleanExtra(EXTRA_OPEN_NEW_TRANSACTION, false)) return Routes.transactionNew()
+            if (intent.getBooleanExtra(EXTRA_OPEN_DRAFTS, false)) return Routes.DRAFTS
+            return null
+        }
     }
 }
 

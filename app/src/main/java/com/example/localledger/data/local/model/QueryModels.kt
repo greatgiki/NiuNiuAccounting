@@ -66,6 +66,12 @@ data class FuzzyTransactionRow(
     @ColumnInfo(name = "external_id") val externalId: String?,
 )
 
+data class DayAmountRow(
+    @ColumnInfo(name = "transaction_at") val transactionAt: Long,
+    val type: TransactionType,
+    @ColumnInfo(name = "base_amount_minor") val baseAmountMinor: Long,
+)
+
 data class TrendSourceRow(
     @ColumnInfo(name = "transaction_at") val transactionAt: Long,
     val type: TransactionType,

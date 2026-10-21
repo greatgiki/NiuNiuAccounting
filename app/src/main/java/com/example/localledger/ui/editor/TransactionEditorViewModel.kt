@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.localledger.core.money.MoneyParser
 import com.example.localledger.domain.error.LedgerException
+import com.example.localledger.domain.importing.MerchantMemoryPolicy
 import com.example.localledger.domain.model.Account
 import com.example.localledger.domain.model.Category
 import com.example.localledger.domain.model.SaveTransactionCommand
@@ -59,6 +60,8 @@ data class EditorInput(
     val toAccountId: String? = null,
     val transactionAt: Long = System.currentTimeMillis(),
     val note: String = "",
+    val counterparty: String = "",
+    val baselineCategoryId: String? = null,
     val saving: Boolean = false,
     val initialized: Boolean = false,
     val amountError: String? = null,
@@ -172,6 +175,8 @@ class TransactionEditorViewModel @Inject constructor(
                                 toAccountId = t.toAccountId,
                                 transactionAt = t.transactionAt,
                                 note = t.note.orEmpty(),
+                                counterparty = t.counterparty.orEmpty(),
+                                baselineCategoryId = t.categoryId,
                                 initialized = true,
                             )
                         }
@@ -264,6 +269,10 @@ class TransactionEditorViewModel @Inject constructor(
         inputFlow.update { it.copy(note = note.take(200)) }
     }
 
+    fun onCounterpartyChange(value: String) {
+        inputFlow.update { it.copy(counterparty = value.take(40)) }
+    }
+
     fun onDateChange(date: LocalDate) {
         inputFlow.update {
             val time = Instant.ofEpochMilli(it.transactionAt).atZone(zoneId).toLocalTime()
@@ -345,6 +354,14 @@ class TransactionEditorViewModel @Inject constructor(
                     transactionAt = input.transactionAt,
                     note = input.note,
                     toAmountMinor = toAmount,
+                    counterparty = if (input.type == TransactionType.TRANSFER) null else input.counterparty,
+                    rememberMerchantCategory = MerchantMemoryPolicy.shouldRemember(
+                        type = input.type,
+                        merchant = input.counterparty,
+                        categoryId = input.categoryId,
+                        previousCategoryId = input.baselineCategoryId,
+                        categoryChanged = input.categoryId != input.baselineCategoryId,
+                    ),
                 )
                 if (input.type == TransactionType.TRANSFER) {
                     saveTransferUseCase(command)

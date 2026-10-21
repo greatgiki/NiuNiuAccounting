@@ -92,6 +92,10 @@ class AppLockViewModel @Inject constructor(
         viewModelScope.launch { controller.setTimeout(minutes) }
     }
 
+    fun setMaskWidgetAmounts(enabled: Boolean) {
+        viewModelScope.launch { controller.setMaskWidgetAmounts(enabled) }
+    }
+
     private fun runAction(block: suspend () -> String) {
         viewModelScope.launch {
             val text = runCatching { block() }.getOrElse { it.message ?: "操作失败，请重试" }
@@ -137,6 +141,8 @@ fun AppLockSettingsScreen(navController: NavHostController, viewModel: AppLockVi
                 onDisable = { flow = PinFlow.Disable },
                 onBiometric = viewModel::setBiometric,
                 onTimeout = viewModel::setTimeout,
+                maskWidgetAmounts = state.maskWidgetAmounts,
+                onMaskWidgetAmounts = viewModel::setMaskWidgetAmounts,
                 modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
             )
         } else {
@@ -191,6 +197,8 @@ fun AppLockSettingsContent(
     onBiometric: (Boolean) -> Unit,
     onTimeout: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    maskWidgetAmounts: Boolean = true,
+    onMaskWidgetAmounts: (Boolean) -> Unit = {},
 ) {
     Column(modifier.verticalScroll(rememberScrollState())) {
         SectionTitle("数字密码")
@@ -223,6 +231,23 @@ fun AppLockSettingsContent(
                             Text(label, style = MaterialTheme.typography.bodyLarge)
                         }
                     }
+                }
+            }
+            SectionTitle("桌面小组件")
+            LedgerCard(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("锁屏时隐藏金额", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            "开启应用锁后，桌面小组件用圆点代替收入、支出和结余。关闭后仍显示金额。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(checked = maskWidgetAmounts, onCheckedChange = onMaskWidgetAmounts)
                 }
             }
             SectionTitle("生物识别")

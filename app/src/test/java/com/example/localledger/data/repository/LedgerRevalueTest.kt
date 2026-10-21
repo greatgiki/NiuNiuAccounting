@@ -56,7 +56,7 @@ class LedgerRevalueTest {
         accounts = AccountRepositoryImpl(source, clock)
         val categories = CategoryRepositoryImpl(source, clock)
         rates = ExchangeRateRepositoryImpl(source)
-        val transactions = TransactionRepositoryImpl(source, rates, clock)
+        val transactions = TransactionRepositoryImpl(source, rates, clock, com.example.localledger.data.repository.MerchantCategoryBook(source, clock))
         saveIncomeExpense = SaveIncomeExpenseUseCase(transactions)
         saveTransfer = SaveTransferUseCase(transactions)
 

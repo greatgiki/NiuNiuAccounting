@@ -22,6 +22,7 @@ data class BackupTables(
     val exchangeRateSnapshots: List<ExchangeRateSnapshotRow> = emptyList(),
     val exchangeRateHistory: List<ExchangeRateHistoryRow> = emptyList(),
     val pendingDrafts: List<PendingDraftRow> = emptyList(),
+    val merchantCategoryRules: List<MerchantCategoryRuleRow> = emptyList(),
 )
 
 @Serializable
@@ -79,6 +80,7 @@ data class TransactionRow(
     val externalSource: String? = null,
     val externalId: String? = null,
     val origin: String = "MANUAL",
+    val counterparty: String? = null,
 )
 
 @Serializable
@@ -157,6 +159,17 @@ data class PendingDraftRow(
     val needsAmount: Boolean = false,
     val sbnKey: String? = null,
     val groupKey: String? = null,
+)
+
+@Serializable
+data class MerchantCategoryRuleRow(
+    val id: String,
+    val ledgerId: String,
+    val merchantKey: String,
+    val merchantLabel: String,
+    val type: String,
+    val categoryId: String,
+    val updatedAt: Long,
 )
 
 data class BackupSummary(

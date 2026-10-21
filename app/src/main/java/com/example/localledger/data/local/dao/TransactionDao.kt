@@ -5,6 +5,7 @@ import androidx.room.Query
 import androidx.room.Upsert
 import com.example.localledger.data.local.entity.TransactionEntity
 import com.example.localledger.data.local.model.CategoryTotalRow
+import com.example.localledger.data.local.model.DayAmountRow
 import com.example.localledger.data.local.model.ExternalKeyRow
 import com.example.localledger.data.local.model.FuzzyTransactionRow
 import com.example.localledger.data.local.model.IncomeExpenseSummaryRow
@@ -183,6 +184,39 @@ interface TransactionDao {
         startInclusive: Long,
         endExclusive: Long,
     ): Flow<IncomeExpenseSummaryRow>
+
+    @Query(
+        """
+        SELECT
+            COALESCE(SUM(CASE WHEN type = 'INCOME' THEN base_amount_minor ELSE 0 END), 0) AS income_minor,
+            COALESCE(SUM(CASE WHEN type = 'EXPENSE' THEN base_amount_minor ELSE 0 END), 0) AS expense_minor
+        FROM transactions
+        WHERE ledger_id = :ledgerId
+          AND transaction_at >= :startInclusive
+          AND transaction_at < :endExclusive
+        """,
+    )
+    suspend fun summary(
+        ledgerId: String,
+        startInclusive: Long,
+        endExclusive: Long,
+    ): IncomeExpenseSummaryRow
+
+    @Query(
+        """
+        SELECT transaction_at, type, base_amount_minor
+        FROM transactions
+        WHERE ledger_id = :ledgerId
+          AND transaction_at >= :startInclusive
+          AND transaction_at < :endExclusive
+          AND type IN ('INCOME', 'EXPENSE')
+        """,
+    )
+    suspend fun listDayAmounts(
+        ledgerId: String,
+        startInclusive: Long,
+        endExclusive: Long,
+    ): List<DayAmountRow>
 
     @Query(
         """

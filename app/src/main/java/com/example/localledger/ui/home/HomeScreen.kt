@@ -36,6 +36,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -134,6 +135,16 @@ fun HomeScreen(
                     onPreviousMonth = viewModel::previousMonth,
                     onNextMonth = viewModel::nextMonth,
                 )
+            }
+            item(key = "calendar", contentType = "calendar") {
+                TextButton(
+                    onClick = { navController.navigate(Routes.CALENDAR) },
+                    modifier = Modifier.padding(top = 4.dp),
+                ) {
+                    Icon(Icons.Outlined.CalendarMonth, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("日历")
+                }
             }
             item(key = "drafts", contentType = "drafts") {
                 PendingDraftBanner(
