@@ -152,6 +152,14 @@ class DraftRepository @Inject constructor(
         dao.updateStatus(id, DraftStatus.DISMISSED, null, clock.millis())
     }
 
+    suspend fun restore(id: String): Boolean {
+        val dao = databaseProvider.get().pendingDraftDao()
+        val existing = dao.findById(id) ?: return false
+        if (existing.status != DraftStatus.DISMISSED) return false
+        dao.updateStatus(id, DraftStatus.PENDING, null, clock.millis())
+        return true
+    }
+
     suspend fun confirm(id: String): DraftConfirmResult = writeOperation {
         val database = databaseProvider.get()
         val existing = database.pendingDraftDao().findById(id) ?: return@writeOperation DraftConfirmResult.NotPending

@@ -16,4 +16,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "LocalLedger"
 include(":app")
+include(":macrobenchmark")
 

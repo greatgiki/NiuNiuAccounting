@@ -1,5 +1,6 @@
 package com.example.localledger.ui.detail
 
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -7,6 +8,8 @@ import com.example.localledger.domain.model.Account
 import com.example.localledger.domain.model.Category
 import com.example.localledger.domain.model.CategoryType
 import com.example.localledger.domain.model.TransactionDetail
+import com.example.localledger.domain.model.SaveTransactionCommand
+import com.example.localledger.domain.model.Transaction
 import com.example.localledger.domain.model.TransactionFilter
 import com.example.localledger.domain.model.TransactionType
 import com.example.localledger.domain.repository.AccountRepository
@@ -14,6 +17,7 @@ import com.example.localledger.domain.repository.CategoryRepository
 import com.example.localledger.domain.repository.TransactionRepository
 import com.example.localledger.domain.time.DateRangeResolver
 import com.example.localledger.domain.usecase.DeleteTransactionUseCase
+import com.example.localledger.benchmark.BenchmarkFlags
 import com.example.localledger.ui.AppSession
 import com.example.localledger.ui.common.UiOutcome
 import com.example.localledger.ui.common.runOutcome
@@ -41,6 +45,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import javax.inject.Inject
 
+@Immutable
 data class TransactionListFilter(
     val type: TransactionType? = null,
     val categoryId: String? = null,
@@ -53,11 +58,13 @@ data class TransactionListFilter(
             startDate == null && endDate == null
 }
 
+@Immutable
 data class TransactionDayGroup(
     val date: LocalDate,
     val items: List<TransactionDetail>,
 )
 
+@Immutable
 data class TransactionListUiState(
     val isLoading: Boolean = true,
     val groups: List<TransactionDayGroup> = emptyList(),
@@ -71,6 +78,7 @@ data class TransactionListUiState(
 
 sealed interface TransactionListEffect {
     data class ShowMessage(val message: String) : TransactionListEffect
+    data object OfferUndo : TransactionListEffect
 }
 
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
@@ -100,10 +108,13 @@ class TransactionListViewModel @Inject constructor(
     )
     private val keywordFlow = MutableStateFlow("")
     private val refreshFlow = MutableStateFlow(0)
-    private val limitFlow = MutableStateFlow(PAGE_SIZE)
+    private val limitFlow = MutableStateFlow(
+        if (BenchmarkFlags.expandedTransactionList) BENCHMARK_PAGE else PAGE_SIZE,
+    )
 
     private val effectChannel = Channel<TransactionListEffect>(Channel.BUFFERED)
     val effects = effectChannel.receiveAsFlow()
+    private var pendingUndo: Transaction? = null
 
     private val queryFlow = combine(
         appSession.state,
@@ -200,7 +211,9 @@ class TransactionListViewModel @Inject constructor(
                 keywordFlow.debounce(300),
             ) { ledgerId, filter, keyword -> Triple(ledgerId, filter, keyword) }
                 .drop(1)
-                .collect { limitFlow.value = PAGE_SIZE }
+                .collect {
+                    limitFlow.value = if (BenchmarkFlags.expandedTransactionList) BENCHMARK_PAGE else PAGE_SIZE
+                }
         }
     }
 
@@ -228,7 +241,42 @@ class TransactionListViewModel @Inject constructor(
     suspend fun deleteTransaction(transactionId: String): UiOutcome {
         val ledgerId = appSession.state.value.currentLedgerId
             ?: return UiOutcome.Failure("请先选择账本")
+        val snapshot = uiState.value.groups
+            .asSequence()
+            .flatMap { it.items.asSequence() }
+            .firstOrNull { it.transaction.id == transactionId }
+            ?.transaction
         return runOutcome("删除失败") { deleteTransactionUseCase(ledgerId, transactionId) }
+            .also { outcome ->
+                if (outcome is UiOutcome.Success && snapshot != null) {
+                    pendingUndo = snapshot
+                    effectChannel.trySend(TransactionListEffect.OfferUndo)
+                }
+            }
+    }
+
+    suspend fun undoDelete(): UiOutcome {
+        val transaction = pendingUndo ?: return UiOutcome.Failure("没有可撤销的删除")
+        return runOutcome("撤销失败") {
+            transactionRepository.saveTransaction(
+                SaveTransactionCommand(
+                    transactionId = transaction.id,
+                    ledgerId = transaction.ledgerId,
+                    type = transaction.type,
+                    amountMinor = transaction.amountMinor,
+                    accountId = transaction.accountId,
+                    toAccountId = transaction.toAccountId,
+                    categoryId = transaction.categoryId,
+                    transactionAt = transaction.transactionAt,
+                    note = transaction.note,
+                    toAmountMinor = transaction.toAmountMinor,
+                    externalSource = transaction.externalSource,
+                    externalId = transaction.externalId,
+                    origin = transaction.origin,
+                ),
+            )
+            pendingUndo = null
+        }
     }
 
     private fun resolveRange(filter: TransactionListFilter) =
@@ -241,6 +289,7 @@ class TransactionListViewModel @Inject constructor(
 
     private companion object {
         const val PAGE_SIZE = 50
+        const val BENCHMARK_PAGE = 500
     }
 }
 

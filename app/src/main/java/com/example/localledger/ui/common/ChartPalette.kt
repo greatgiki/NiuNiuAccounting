@@ -9,14 +9,14 @@ import com.example.localledger.ui.theme.chartPalette
 
 object ChartPalette {
     val colors: List<Color> = listOf(
-        Color(0xFFC4392F),
-        Color(0xFFD97706),
-        Color(0xFF2F6F4E),
-        Color(0xFF2563EB),
-        Color(0xFF7C3AED),
-        Color(0xFF0F766E),
-        Color(0xFFBE185D),
-        Color(0xFF64748B),
+        Color(0xFF8E3D32),
+        Color(0xFF6E5128),
+        Color(0xFF2F6B52),
+        Color(0xFF4E6270),
+        Color(0xFF6A5A78),
+        Color(0xFF3F6F66),
+        Color(0xFF8A5A62),
+        Color(0xFF6A6258),
     )
 
     fun color(index: Int): Color = colors[index % colors.size]

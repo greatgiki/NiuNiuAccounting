@@ -34,6 +34,7 @@ android {
             // Debug stays unminified. It is slower than release: no R8, extra Compose
             // checks, and the baseline profile is not compiled into a speed profile.
             isMinifyEnabled = false
+            buildConfigField("boolean", "SEED_DEMO", "false")
         }
         release {
             isMinifyEnabled = true
@@ -42,7 +43,23 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            buildConfigField("boolean", "SEED_DEMO", "false")
         }
+        create("benchmark") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
+            isDebuggable = false
+            buildConfigField("boolean", "SEED_DEMO", "true")
+        }
+    }
+
+    composeCompiler {
+        reportsDestination = layout.buildDirectory.dir("compose_compiler")
+        metricsDestination = layout.buildDirectory.dir("compose_compiler")
+        stabilityConfigurationFiles.add(
+            rootProject.layout.projectDirectory.file("compose_stability.conf"),
+        )
     }
 
     compileOptions {

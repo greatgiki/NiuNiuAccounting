@@ -14,14 +14,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AccountBalance
-import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CreditCard
-import androidx.compose.material.icons.filled.MoreHoriz
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.AccountBalance
+import androidx.compose.material.icons.outlined.AccountBalanceWallet
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.CreditCard
+import androidx.compose.material.icons.outlined.MoreHoriz
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -35,8 +35,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import com.example.localledger.ui.component.LedgerSnackbarHost
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -77,11 +77,11 @@ fun accountTypeLabel(type: AccountType): String = when (type) {
 }
 
 fun accountTypeIcon(type: AccountType): ImageVector = when (type) {
-    AccountType.CASH -> Icons.Default.Payments
-    AccountType.BANK_CARD -> Icons.Default.AccountBalance
-    AccountType.E_WALLET -> Icons.Default.AccountBalanceWallet
-    AccountType.CREDIT_CARD -> Icons.Default.CreditCard
-    AccountType.OTHER -> Icons.Default.MoreHoriz
+    AccountType.CASH -> Icons.Outlined.Payments
+    AccountType.BANK_CARD -> Icons.Outlined.AccountBalance
+    AccountType.E_WALLET -> Icons.Outlined.AccountBalanceWallet
+    AccountType.CREDIT_CARD -> Icons.Outlined.CreditCard
+    AccountType.OTHER -> Icons.Outlined.MoreHoriz
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -118,18 +118,18 @@ fun AccountManageScreen(
                 title = { Text("账户管理") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
                     }
                 },
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = { LedgerSnackbarHost(snackbarHostState) },
         floatingActionButton = {
             FloatingActionButton(onClick = {
                 saveGate.reset()
                 editTarget = Pair(true, null)
             }) {
-                Icon(Icons.Default.Add, contentDescription = "新建账户")
+                Icon(Icons.Outlined.Add, contentDescription = "新建账户")
             }
         },
     ) { padding ->
@@ -266,7 +266,7 @@ private fun AccountRow(
         }
         MoneyText(amountMinor = balanceMinor, currencyCode = currencyCode)
         IconButton(onClick = { menuExpanded = true }) {
-            Icon(Icons.Default.MoreVert, contentDescription = "更多操作")
+            Icon(Icons.Outlined.MoreVert, contentDescription = "更多操作")
         }
         DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
             DropdownMenuItem(
