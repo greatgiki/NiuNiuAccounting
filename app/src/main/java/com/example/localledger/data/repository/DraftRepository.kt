@@ -31,6 +31,7 @@ data class PendingDraft(
     val accountId: String?,
     val transactionAt: Long,
     val likelyDuplicate: Boolean,
+    val needsAmount: Boolean = false,
 )
 
 data class NewDraft(
@@ -47,11 +48,15 @@ data class NewDraft(
     val transactionAt: Long,
     val notificationKey: String?,
     val likelyDuplicate: Boolean,
+    val needsAmount: Boolean = false,
+    val sbnKey: String? = null,
+    val groupKey: String? = null,
 )
 
 sealed interface DraftConfirmResult {
     data class Confirmed(val transactionId: String) : DraftConfirmResult
     data object MissingAssignment : DraftConfirmResult
+    data object NeedsAmount : DraftConfirmResult
     data object NotPending : DraftConfirmResult
 }
 
@@ -98,9 +103,42 @@ class DraftRepository @Inject constructor(
                 likelyDuplicate = draft.likelyDuplicate,
                 createdAt = now,
                 updatedAt = now,
+                needsAmount = draft.needsAmount,
+                sbnKey = draft.sbnKey,
+                groupKey = draft.groupKey,
             ),
         )
         id
+    }
+
+    suspend fun completeAmount(
+        id: String,
+        amountMinor: Long,
+        counterparty: String,
+        rawText: String,
+        likelyDuplicate: Boolean,
+    ): Boolean {
+        if (amountMinor <= 0L) return false
+        val dao = databaseProvider.get().pendingDraftDao()
+        val existing = dao.findById(id) ?: return false
+        if (existing.status != DraftStatus.PENDING || !existing.needsAmount) return false
+        val party = counterparty.ifBlank { existing.counterparty.orEmpty() }
+        val updated = dao.completeAmount(
+            id = id,
+            amountMinor = amountMinor,
+            counterparty = party.ifBlank { null },
+            note = ImportNote.compose(party, "", ""),
+            rawText = rawText.take(500),
+            likelyDuplicate = likelyDuplicate || existing.likelyDuplicate,
+            updatedAt = clock.millis(),
+        )
+        return updated > 0
+    }
+
+    suspend fun updateAmount(id: String, amountMinor: Long): Boolean {
+        if (amountMinor <= 0L) return false
+        val updated = databaseProvider.get().pendingDraftDao().setAmount(id, amountMinor, clock.millis())
+        return updated > 0
     }
 
     suspend fun updateAssignment(id: String, categoryId: String?, accountId: String?) {
@@ -118,6 +156,7 @@ class DraftRepository @Inject constructor(
         val database = databaseProvider.get()
         val existing = database.pendingDraftDao().findById(id) ?: return@writeOperation DraftConfirmResult.NotPending
         if (existing.status != DraftStatus.PENDING) return@writeOperation DraftConfirmResult.NotPending
+        if (existing.needsAmount || existing.amountMinor <= 0L) return@writeOperation DraftConfirmResult.NeedsAmount
         val categoryId = existing.categoryId
         val accountId = existing.accountId
         if (categoryId == null || accountId == null) return@writeOperation DraftConfirmResult.MissingAssignment
@@ -156,6 +195,7 @@ class DraftRepository @Inject constructor(
             accountId = accountId,
             transactionAt = transactionAt,
             likelyDuplicate = likelyDuplicate,
+            needsAmount = needsAmount,
         )
     }
 }

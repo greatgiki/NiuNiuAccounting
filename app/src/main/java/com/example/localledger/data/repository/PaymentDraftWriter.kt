@@ -1,22 +1,35 @@
 package com.example.localledger.data.repository
 
+import android.database.sqlite.SQLiteConstraintException
+import android.util.Log
 import com.example.localledger.core.storage.SettingsStore
 import com.example.localledger.data.local.database.WalletDatabaseSource
+import com.example.localledger.data.local.entity.PendingDraftEntity
 import com.example.localledger.domain.importing.AccountHintMapper
 import com.example.localledger.domain.importing.BillSource
 import com.example.localledger.domain.importing.CandidateKind
+import com.example.localledger.domain.importing.CaptureGate
+import com.example.localledger.domain.importing.CaptureSettings
 import com.example.localledger.domain.importing.CategoryKeywordMapper
+import com.example.localledger.domain.importing.DedupDecision
+import com.example.localledger.domain.importing.DedupExisting
+import com.example.localledger.domain.importing.DedupIncoming
 import com.example.localledger.domain.importing.DuplicateFlag
 import com.example.localledger.domain.importing.ExternalKey
 import com.example.localledger.domain.importing.ImportMatcher
 import com.example.localledger.domain.importing.MatchCandidate
+import com.example.localledger.domain.importing.NotificationCapturePolicy
 import com.example.localledger.domain.importing.PaymentNotificationParser
 import com.example.localledger.domain.importing.RecordOrigin
 import com.example.localledger.domain.model.CategoryType
 import com.example.localledger.domain.model.TransactionType
 import com.example.localledger.domain.repository.AccountRepository
 import com.example.localledger.domain.repository.CategoryRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.time.Clock
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -25,6 +38,9 @@ data class CapturedNotification(
     val text: String,
     val postedAt: Long,
     val key: String,
+    val postTime: Long = postedAt,
+    val groupKey: String? = null,
+    val isGroupSummary: Boolean = false,
 )
 
 sealed interface NotificationRecordResult {
@@ -36,11 +52,37 @@ sealed interface NotificationRecordResult {
         val counterparty: String,
         val autoConfirmed: Boolean,
         val needsAssignment: Boolean,
+        val needsAmount: Boolean,
+        val patternId: String,
     ) : NotificationRecordResult
 
-    data object Ignored : NotificationRecordResult
-    data object Disabled : NotificationRecordResult
-    data object Duplicate : NotificationRecordResult
+    data class Enriched(
+        val draftId: String,
+        val source: BillSource,
+        val type: TransactionType,
+        val amountMinor: Long,
+        val counterparty: String,
+        val autoConfirmed: Boolean,
+        val patternId: String,
+    ) : NotificationRecordResult
+
+    data class Ignored(val reason: String) : NotificationRecordResult
+    data class Disabled(val reason: String) : NotificationRecordResult
+    data class Duplicate(val reason: String) : NotificationRecordResult
+    data class Failed(val reason: String) : NotificationRecordResult
+}
+
+fun NotificationRecordResult.describe(): String = when (this) {
+    is NotificationRecordResult.Created -> when {
+        autoConfirmed -> "已自动记账"
+        needsAmount -> "已生成待确认（需补全金额）"
+        else -> "已生成待确认"
+    }
+    is NotificationRecordResult.Enriched -> if (autoConfirmed) "已补全金额并自动记账" else "已补全金额"
+    is NotificationRecordResult.Ignored -> "已忽略：$reason"
+    is NotificationRecordResult.Disabled -> "未处理：$reason"
+    is NotificationRecordResult.Duplicate -> "已忽略：$reason"
+    is NotificationRecordResult.Failed -> "写入失败：$reason"
 }
 
 @Singleton
@@ -50,47 +92,103 @@ class PaymentDraftWriter @Inject constructor(
     private val draftRepository: DraftRepository,
     private val accountRepository: AccountRepository,
     private val categoryRepository: CategoryRepository,
+    private val clock: Clock,
 ) {
-    suspend fun record(event: CapturedNotification): NotificationRecordResult {
-        val source = sourceOf(event.packageName) ?: return NotificationRecordResult.Ignored
-        val settings = settingsStore.peek() ?: return NotificationRecordResult.Disabled
-        if (!settings.autoRecordEnabled) return NotificationRecordResult.Disabled
-        if (source == BillSource.WECHAT && !settings.wechatNotificationEnabled) return NotificationRecordResult.Disabled
-        if (source == BillSource.ALIPAY && !settings.alipayNotificationEnabled) return NotificationRecordResult.Disabled
-        val parsed = PaymentNotificationParser.parse(source, event.text) ?: return NotificationRecordResult.Ignored
+    private val recordMutex = Mutex()
+
+    suspend fun record(event: CapturedNotification): NotificationRecordResult = recordMutex.withLock {
+        try {
+            recordLocked(event)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Log.e(TAG, "通知记账写入失败", error)
+            NotificationRecordResult.Failed(error.message ?: "未知错误")
+        }
+    }
+
+    private suspend fun recordLocked(event: CapturedNotification): NotificationRecordResult {
+        val settings = CaptureSettings.from(settingsStore.peek())
+        when (val gate = NotificationCapturePolicy.gate(event.packageName, settings)) {
+            is CaptureGate.Disabled -> return NotificationRecordResult.Disabled(gate.reason)
+            is CaptureGate.Ignored -> return NotificationRecordResult.Ignored(gate.reason)
+            is CaptureGate.Open -> {
+                if (event.text.isBlank()) return NotificationRecordResult.Ignored("文本为空")
+                val parsed = PaymentNotificationParser.parse(gate.source, event.text)
+                    ?: return NotificationRecordResult.Ignored("不是支付通知")
+                if (!NotificationCapturePolicy.amountlessAllowed(parsed.needsAmount, settings)) {
+                    return NotificationRecordResult.Ignored("金额缺失，已关闭无金额草稿")
+                }
+                val loaded = settingsStore.peek() ?: return NotificationRecordResult.Disabled("设置尚未读取")
+                return saveParsed(event, loaded, parsed)
+            }
+        }
+    }
+
+    private suspend fun saveParsed(
+        event: CapturedNotification,
+        settings: com.example.localledger.core.storage.AppSettings,
+        parsed: com.example.localledger.domain.importing.ParsedNotification,
+    ): NotificationRecordResult {
         val ledgerId = settings.currentLedgerId
-        if (event.key.isNotBlank() && draftRepository.findByNotificationKey(event.key) != null) {
-            return NotificationRecordResult.Duplicate
-        }
+        val dedupKey = NotificationCapturePolicy.dedupKey(event.key, event.postTime)
+        val now = clock.millis()
         val database = databaseProvider.get()
-        val start = event.postedAt - ImportMatcher.WINDOW_MILLIS
-        val end = event.postedAt + ImportMatcher.WINDOW_MILLIS + 1
-        val pending = database.pendingDraftDao().listPendingInRange(ledgerId, start, end)
-        if (pending.any { it.type == parsed.type && it.amountMinor == parsed.amountMinor }) {
-            return NotificationRecordResult.Duplicate
+        val dao = database.pendingDraftDao()
+        val keyed = buildList {
+            dao.findByNotificationKey(dedupKey)?.let(::add)
+            if (event.key != dedupKey) dao.findByNotificationKey(event.key)?.let(::add)
+            if (event.key.isNotBlank()) addAll(dao.findBySbnKey(event.key))
         }
-        val transactions = database.transactionDao().listFuzzyCandidates(ledgerId, start, end).map { row ->
-            MatchCandidate(
-                id = row.id,
-                kind = CandidateKind.TRANSACTION,
-                type = row.type,
-                amountMinor = row.amountMinor,
-                transactionAt = row.transactionAt,
-                origin = row.origin,
-                externalSource = row.externalSource,
-                externalId = row.externalId,
-            )
-        }
-        val match = ImportMatcher.match(
-            source = source,
-            externalId = "",
+        val recent = dao.listCreatedSince(ledgerId, now - ImportMatcher.WINDOW_MILLIS)
+        val existing = (keyed + recent).distinctBy { it.id }.map { it.toDedup() }
+        val incoming = DedupIncoming(
+            dedupKey = dedupKey,
+            sbnKey = event.key,
+            postTime = event.postTime,
+            groupKey = event.groupKey,
             type = parsed.type,
             amountMinor = parsed.amountMinor,
-            transactionAt = event.postedAt,
-            knownExternalIds = emptySet<ExternalKey>(),
-            candidates = transactions,
+            needsAmount = parsed.needsAmount,
+            now = now,
         )
-        val likelyDuplicate = match.flag == DuplicateFlag.LIKELY_DUPLICATE
+        val amountForMatch = parsed.amountMinor ?: 0L
+        var likelyDuplicate = false
+        var enrichId: String? = null
+        when (val decision = NotificationCapturePolicy.dedup(incoming, existing)) {
+            DedupDecision.KeepFirst -> return NotificationRecordResult.Duplicate("重复通知，已保留第一次记录")
+            is DedupDecision.Enrich -> {
+                enrichId = decision.draftId
+                likelyDuplicate = decision.likelyDuplicate
+            }
+            is DedupDecision.Insert -> likelyDuplicate = decision.likelyDuplicate
+        }
+        if (!parsed.needsAmount && amountForMatch > 0L) {
+            val start = event.postedAt - ImportMatcher.WINDOW_MILLIS
+            val end = event.postedAt + ImportMatcher.WINDOW_MILLIS + 1
+            val transactions = database.transactionDao().listFuzzyCandidates(ledgerId, start, end).map { row ->
+                MatchCandidate(
+                    id = row.id,
+                    kind = CandidateKind.TRANSACTION,
+                    type = row.type,
+                    amountMinor = row.amountMinor,
+                    transactionAt = row.transactionAt,
+                    origin = row.origin,
+                    externalSource = row.externalSource,
+                    externalId = row.externalId,
+                )
+            }
+            val match = ImportMatcher.match(
+                source = parsed.source,
+                externalId = "",
+                type = parsed.type,
+                amountMinor = amountForMatch,
+                transactionAt = event.postedAt,
+                knownExternalIds = emptySet<ExternalKey>(),
+                candidates = transactions,
+            )
+            if (match.flag == DuplicateFlag.LIKELY_DUPLICATE) likelyDuplicate = true
+        }
         val categoryType = if (parsed.type == TransactionType.INCOME) CategoryType.INCOME else CategoryType.EXPENSE
         val categories = categoryRepository.observeCategories(ledgerId, categoryType).first()
         val accounts = accountRepository.observeAccounts(ledgerId).first()
@@ -99,51 +197,96 @@ class PaymentDraftWriter @Inject constructor(
             ?: categories.firstOrNull { !it.isArchived && it.name == "其他" }?.id
         val accountId = AccountHintMapper.suggest(
             paymentMethod = "",
-            source = source,
+            source = parsed.source,
             accounts = accounts,
-            defaultAccountId = settings.importAccountId(ledgerId, source.name),
+            defaultAccountId = settings.importAccountId(ledgerId, parsed.source.name),
         ).accountId
+        val targetId = enrichId
+        if (targetId != null && parsed.amountMinor != null) {
+            val filled = draftRepository.completeAmount(
+                id = targetId,
+                amountMinor = parsed.amountMinor,
+                counterparty = parsed.counterparty,
+                rawText = event.text,
+                likelyDuplicate = likelyDuplicate,
+            )
+            if (filled) {
+                val needsAssignment = categoryId == null || accountId == null
+                val autoConfirmed = settings.autoConfirmDrafts && !likelyDuplicate && !needsAssignment &&
+                    draftRepository.confirm(targetId) is DraftConfirmResult.Confirmed
+                return NotificationRecordResult.Enriched(
+                    draftId = targetId,
+                    source = parsed.source,
+                    type = parsed.type,
+                    amountMinor = parsed.amountMinor,
+                    counterparty = parsed.counterparty,
+                    autoConfirmed = autoConfirmed,
+                    patternId = parsed.patternId,
+                )
+            }
+        }
         val draftId = try {
             draftRepository.insert(
                 NewDraft(
                     ledgerId = ledgerId,
-                    source = source,
+                    source = parsed.source,
                     type = parsed.type,
-                    amountMinor = parsed.amountMinor,
+                    amountMinor = parsed.amountMinor ?: 0L,
                     counterparty = parsed.counterparty,
                     rawText = event.text,
                     categoryId = categoryId,
                     accountId = accountId,
                     transactionAt = event.postedAt,
-                    notificationKey = event.key.ifBlank { null },
+                    notificationKey = dedupKey,
                     likelyDuplicate = likelyDuplicate,
+                    needsAmount = parsed.needsAmount,
+                    sbnKey = event.key,
+                    groupKey = event.groupKey,
                 ),
             )
-        } catch (_: Exception) {
-            return NotificationRecordResult.Duplicate
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Log.e(TAG, "草稿插入失败 key=${event.key}", error)
+            if (error is SQLiteConstraintException || dao.findByNotificationKey(dedupKey) != null) {
+                return NotificationRecordResult.Duplicate("重复通知，已保留第一次记录")
+            }
+            return NotificationRecordResult.Failed(error.message ?: "草稿写入失败")
         }
         val needsAssignment = categoryId == null || accountId == null
-        val autoConfirmed = settings.autoConfirmDrafts && !likelyDuplicate && !needsAssignment &&
+        val autoConfirmed = !parsed.needsAmount && settings.autoConfirmDrafts && !likelyDuplicate && !needsAssignment &&
             draftRepository.confirm(draftId) is DraftConfirmResult.Confirmed
         return NotificationRecordResult.Created(
             draftId = draftId,
-            source = source,
+            source = parsed.source,
             type = parsed.type,
-            amountMinor = parsed.amountMinor,
+            amountMinor = parsed.amountMinor ?: 0L,
             counterparty = parsed.counterparty,
             autoConfirmed = autoConfirmed,
             needsAssignment = needsAssignment && !autoConfirmed,
+            needsAmount = parsed.needsAmount,
+            patternId = parsed.patternId,
         )
     }
 
-    private fun sourceOf(packageName: String): BillSource? = when (packageName) {
-        WECHAT_PACKAGE -> BillSource.WECHAT
-        ALIPAY_PACKAGE -> BillSource.ALIPAY
-        else -> null
+    private fun PendingDraftEntity.toDedup(): DedupExisting {
+        return DedupExisting(
+            id = id,
+            dedupKey = notificationKey.orEmpty(),
+            sbnKey = sbnKey ?: notificationKey.orEmpty(),
+            postTime = transactionAt,
+            groupKey = groupKey,
+            type = type,
+            amountMinor = amountMinor,
+            needsAmount = needsAmount,
+            pending = status == com.example.localledger.domain.importing.DraftStatus.PENDING,
+            createdAt = createdAt,
+        )
     }
 
     companion object {
-        const val WECHAT_PACKAGE = "com.tencent.mm"
-        const val ALIPAY_PACKAGE = "com.eg.android.AlipayGphone"
+        const val WECHAT_PACKAGE = NotificationCapturePolicy.WECHAT_PACKAGE
+        const val ALIPAY_PACKAGE = NotificationCapturePolicy.ALIPAY_PACKAGE
+        private const val TAG = "NiuNiuNotify"
     }
 }
