@@ -18,7 +18,9 @@ data class BackupFileHeader(
 )
 
 object BackupCodec {
-    const val FORMAT_VERSION = 1
+    /** Written by this build. Readers still accept [MIN_FORMAT_VERSION]. */
+    const val FORMAT_VERSION = 2
+    const val MIN_FORMAT_VERSION = 1
     const val MAGIC = "NNBK"
     private const val HEADER_BYTES = 18
     private const val FLAG_ENCRYPTED = 1
@@ -49,9 +51,12 @@ object BackupCodec {
         } else {
             zipped
         }
+        if (document.formatVersion !in MIN_FORMAT_VERSION..FORMAT_VERSION) {
+            throw BackupFailure("无法识别的备份格式，请更新牛牛记账后再试")
+        }
         val header = ByteBuffer.allocate(HEADER_BYTES).order(ByteOrder.BIG_ENDIAN)
         header.put(MAGIC.toByteArray(Charsets.US_ASCII))
-        header.put(FORMAT_VERSION.toByte())
+        header.put(document.formatVersion.toByte())
         header.put((if (encrypt) FLAG_ENCRYPTED else 0).toByte())
         header.putInt(document.schemaVersion)
         header.putLong(document.createdAtEpochMillis)
@@ -63,7 +68,9 @@ object BackupCodec {
         val magic = bytes.copyOfRange(0, 4).toString(Charsets.US_ASCII)
         if (magic != MAGIC) throw BackupFailure("无法识别的备份文件", BackupFailure.Kind.Corrupt)
         val format = bytes[4].toInt() and 0xFF
-        if (format != FORMAT_VERSION) throw BackupFailure("无法识别的备份格式，请更新牛牛记账后再试")
+        if (format !in MIN_FORMAT_VERSION..FORMAT_VERSION) {
+            throw BackupFailure("无法识别的备份格式，请更新牛牛记账后再试")
+        }
         val flags = bytes[5].toInt() and 0xFF
         if ((flags and FLAG_ENCRYPTED.inv()) != 0) {
             throw BackupFailure("无法识别的备份格式，请更新牛牛记账后再试")
@@ -103,7 +110,9 @@ object BackupCodec {
         } catch (_: Exception) {
             throw BackupFailure("备份内容无法识别")
         }
-        if (document.formatVersion != FORMAT_VERSION) {
+        if (document.formatVersion != fileHeader.formatVersion ||
+            document.formatVersion !in MIN_FORMAT_VERSION..FORMAT_VERSION
+        ) {
             throw BackupFailure("无法识别的备份格式，请更新牛牛记账后再试")
         }
         if (document.schemaVersion != fileHeader.schemaVersion ||

@@ -58,6 +58,7 @@ import com.example.localledger.domain.model.TransactionType
 import com.example.localledger.notification.PendingNavigation
 import com.example.localledger.ui.AppSession
 import com.example.localledger.ui.account.AccountManageScreen
+import com.example.localledger.ui.calendar.CalendarScreen
 import com.example.localledger.ui.budget.BudgetManageScreen
 import com.example.localledger.ui.category.CategoryManageScreen
 import com.example.localledger.ui.detail.TransactionListScreen
@@ -71,6 +72,7 @@ import com.example.localledger.ui.recurring.RecurringRuleScreen
 import com.example.localledger.ui.backup.BackupScreen
 import com.example.localledger.ui.exporting.ExportScreen
 import com.example.localledger.ui.lock.AppLockSettingsScreen
+import com.example.localledger.ui.settings.MerchantCategoryScreen
 import com.example.localledger.ui.settings.SettingsScreen
 import com.example.localledger.ui.statistics.StatisticsScreen
 import kotlinx.coroutines.launch
@@ -93,6 +95,8 @@ object Routes {
     const val BACKUP = "backup"
     const val EXPORT = "export"
     const val APP_LOCK = "app-lock"
+    const val CALENDAR = "calendar"
+    const val MERCHANT_CATEGORIES = "merchant-categories"
     const val TRANSACTIONS_PATTERN =
         "transactions?type={type}&categoryId={categoryId}&accountId={accountId}" +
             "&startDate={startDate}&endDate={endDate}"
@@ -298,6 +302,12 @@ fun AppNavHost(appSession: AppSession, pendingNavigation: PendingNavigation) {
                 }
                 composable(Routes.APP_LOCK) {
                     AppLockSettingsScreen(navController = navController)
+                }
+                composable(Routes.CALENDAR) {
+                    CalendarScreen(navController = navController)
+                }
+                composable(Routes.MERCHANT_CATEGORIES) {
+                    MerchantCategoryScreen(navController = navController)
                 }
                 composable(
                     route = Routes.CATEGORIES,

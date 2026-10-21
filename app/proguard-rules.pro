@@ -16,6 +16,10 @@
 -keep class com.example.localledger.data.work.RecurringTransactionWorker { *; }
 -keep class com.example.localledger.data.work.AutoBackupWorker { *; }
 -keep class com.example.localledger.security.BiometricUnlockActivity { *; }
+-keep class com.example.localledger.widget.LedgerSummaryWidgetReceiver { *; }
+-keep class com.example.localledger.widget.LedgerSummaryWidget { *; }
+-keep class com.example.localledger.widget.WidgetEntryPoint { *; }
+-keep class * implements com.example.localledger.widget.WidgetEntryPoint { *; }
 
 -keepclassmembers class com.example.localledger.data.backup.** {
     *** Companion;

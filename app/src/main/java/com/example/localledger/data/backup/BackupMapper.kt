@@ -6,6 +6,7 @@ import com.example.localledger.data.local.entity.CategoryEntity
 import com.example.localledger.data.local.entity.ExchangeRateHistoryEntity
 import com.example.localledger.data.local.entity.ExchangeRateSnapshotEntity
 import com.example.localledger.data.local.entity.LedgerEntity
+import com.example.localledger.data.local.entity.MerchantCategoryRuleEntity
 import com.example.localledger.data.local.entity.PendingDraftEntity
 import com.example.localledger.data.local.entity.RecurringOccurrenceEntity
 import com.example.localledger.data.local.entity.RecurringRuleEntity
@@ -27,7 +28,7 @@ internal fun CategoryEntity.toRow() = CategoryRow(
 
 internal fun TransactionEntity.toRow() = TransactionRow(
     id, ledgerId, type.name, amountMinor, accountId, toAccountId, categoryId, transactionAt, note,
-    createdAt, updatedAt, toAmountMinor, baseAmountMinor, fxRate, externalSource, externalId, origin,
+    createdAt, updatedAt, toAmountMinor, baseAmountMinor, fxRate, externalSource, externalId, origin, counterparty,
 )
 
 internal fun BudgetEntity.toRow() = BudgetRow(
@@ -44,6 +45,10 @@ internal fun RecurringOccurrenceEntity.toRow() = RecurringOccurrenceRow(ruleId, 
 internal fun ExchangeRateSnapshotEntity.toRow() = ExchangeRateSnapshotRow(baseCode, ratesJson, fetchedAt, source)
 
 internal fun ExchangeRateHistoryEntity.toRow() = ExchangeRateHistoryRow(baseCode, fetchedAt, ratesJson, source)
+
+internal fun MerchantCategoryRuleEntity.toRow() = MerchantCategoryRuleRow(
+    id, ledgerId, merchantKey, merchantLabel, type.name, categoryId, updatedAt,
+)
 
 internal fun PendingDraftEntity.toRow() = PendingDraftRow(
     id, ledgerId, source, type.name, amountMinor, counterparty, note, rawText, categoryId, accountId,
@@ -65,7 +70,7 @@ internal fun CategoryRow.toEntity() = CategoryEntity(
 internal fun TransactionRow.toEntity() = TransactionEntity(
     id, ledgerId, TransactionType.valueOf(type), amountMinor, accountId, toAccountId, categoryId,
     transactionAt, note, createdAt, updatedAt, toAmountMinor, baseAmountMinor, fxRate,
-    externalSource, externalId, origin,
+    externalSource, externalId, origin, counterparty,
 )
 
 internal fun BudgetRow.toEntity() = BudgetEntity(
@@ -83,6 +88,10 @@ internal fun RecurringOccurrenceRow.toEntity() = RecurringOccurrenceEntity(ruleI
 internal fun ExchangeRateSnapshotRow.toEntity() = ExchangeRateSnapshotEntity(baseCode, ratesJson, fetchedAt, source)
 
 internal fun ExchangeRateHistoryRow.toEntity() = ExchangeRateHistoryEntity(baseCode, fetchedAt, ratesJson, source)
+
+internal fun MerchantCategoryRuleRow.toEntity() = MerchantCategoryRuleEntity(
+    id, ledgerId, merchantKey, merchantLabel, TransactionType.valueOf(type), categoryId, updatedAt,
+)
 
 internal fun PendingDraftRow.toEntity() = PendingDraftEntity(
     id, ledgerId, source, TransactionType.valueOf(type), amountMinor, counterparty, note, rawText,

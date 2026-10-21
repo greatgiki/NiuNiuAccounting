@@ -362,6 +362,17 @@ private fun EditorContent(
                 }
             }
 
+            if (input.type != TransactionType.TRANSFER) {
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = input.counterparty,
+                    onValueChange = viewModel::onCounterpartyChange,
+                    label = { Text("商家 / 对方") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                )
+            }
+
             Spacer(Modifier.height(12.dp))
 
             OutlinedTextField(

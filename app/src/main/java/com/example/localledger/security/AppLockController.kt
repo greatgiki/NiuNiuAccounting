@@ -7,6 +7,7 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import com.example.localledger.core.storage.SettingsStore
 import com.example.localledger.di.ApplicationScope
 import com.example.localledger.ui.AppSession
+import com.example.localledger.widget.LedgerWidgetRefresher
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,6 +26,7 @@ data class AppLockState(
     val biometricEnabled: Boolean = false,
     val timeoutMinutes: Int = 1,
     val unreadable: Boolean = false,
+    val maskWidgetAmounts: Boolean = true,
 ) {
     enum class Phase { Unknown, Locked, Unlocked }
 
@@ -37,6 +39,7 @@ class AppLockController @Inject constructor(
     private val settingsStore: SettingsStore,
     private val appSession: AppSession,
     private val clock: Clock,
+    private val widgetRefresher: LedgerWidgetRefresher,
     @ApplicationScope private val scope: CoroutineScope,
 ) : DefaultLifecycleObserver {
     private val started = AtomicBoolean(false)
@@ -105,6 +108,7 @@ class AppLockController @Inject constructor(
         mutableState.update {
             it.copy(phase = AppLockState.Phase.Unlocked, hasPin = true, biometricEnabled = false, unreadable = false)
         }
+        widgetRefresher.request()
         return null
     }
 
@@ -127,12 +131,14 @@ class AppLockController @Inject constructor(
             is PinRead.Unreadable -> return "无法读取应用锁，请先备份账本，再清除应用数据"
             PinRead.Absent -> {
                 clearState()
+                widgetRefresher.request()
                 return null
             }
         }
         if (!record.matches(pin)) return "密码不正确"
         store.clear()
         clearState()
+        widgetRefresher.request()
         return null
     }
 
@@ -153,6 +159,12 @@ class AppLockController @Inject constructor(
         timeoutMinutes = clamped
         appSession.updateSettings { it.copy(appLockTimeoutMinutes = clamped) }
         mutableState.update { it.copy(timeoutMinutes = clamped) }
+    }
+
+    suspend fun setMaskWidgetAmounts(enabled: Boolean) {
+        appSession.updateSettings { it.copy(widgetMaskAmountsWhenLocked = enabled) }
+        mutableState.update { it.copy(maskWidgetAmounts = enabled) }
+        widgetRefresher.request()
     }
 
     private suspend fun hydrate() {
@@ -194,9 +206,11 @@ class AppLockController @Inject constructor(
     }
 
     private suspend fun refreshTimeout() {
-        val minutes = settingsStore.peek()?.appLockTimeoutMinutes ?: timeoutMinutes
+        val settings = settingsStore.peek()
+        val minutes = settings?.appLockTimeoutMinutes ?: timeoutMinutes
         timeoutMinutes = minutes.coerceIn(0, 15)
-        mutableState.update { it.copy(timeoutMinutes = timeoutMinutes) }
+        val mask = settings?.widgetMaskAmountsWhenLocked ?: true
+        mutableState.update { it.copy(timeoutMinutes = timeoutMinutes, maskWidgetAmounts = mask) }
     }
 
     private fun lockNow() {
