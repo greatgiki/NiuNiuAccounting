@@ -21,8 +21,11 @@ import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.EventRepeat
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Savings
+import androidx.compose.material.icons.outlined.SettingsBackupRestore
+import androidx.compose.material.icons.outlined.TableChart
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -127,6 +130,12 @@ fun SettingsScreen(
 
         SectionTitle("数据与隐私")
         LedgerCard(modifier = Modifier.fillMaxWidth()) {
+            SettingsEntry("备份与恢复", Icons.Outlined.SettingsBackupRestore) { navController.navigate(Routes.BACKUP) }
+            LedgerHairline()
+            SettingsEntry("导出流水", Icons.Outlined.TableChart) { navController.navigate(Routes.EXPORT) }
+            LedgerHairline()
+            SettingsEntry("应用锁", Icons.Outlined.Lock) { navController.navigate(Routes.APP_LOCK) }
+            LedgerHairline()
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
                     "数据仅保存在本机",
@@ -134,11 +143,10 @@ fun SettingsScreen(
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "账本、账户和流水只保存在本机，不会上传。\n" +
-                        "刷新汇率时优先读取中国外汇交易中心公布的人民币汇率中间价，只获取公开汇率，不发送账本内容。\n" +
-                        "中间价未公布的币种再向其他公开接口补齐。没有网络时继续使用上次缓存的汇率。\n" +
-                        "卸载应用、清除应用数据或恢复出厂设置后，账本数据将被删除且无法恢复。\n" +
-                        "当前版本不支持备份与恢复。",
+                    "账本、账户和流水只保存在本机，不会上传。系统自带的云备份已关闭。\n" +
+                        "换机或卸载前，请在「备份与恢复」把账本导出成文件；文件由你自己保管，可以设置密码。也可以按日期把流水导出为 Excel 或 CSV。\n" +
+                        "刷新汇率时优先读取中国外汇交易中心公布的人民币汇率中间价，只获取公开汇率，不发送账本内容。没有网络时继续使用上次缓存的汇率。\n" +
+                        "卸载应用、清除应用数据或恢复出厂设置后，没有另行导出的账本会被删除。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

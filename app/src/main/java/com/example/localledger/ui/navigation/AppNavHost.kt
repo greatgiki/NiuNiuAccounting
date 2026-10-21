@@ -68,6 +68,9 @@ import com.example.localledger.ui.importing.BillImportScreen
 import com.example.localledger.ui.importing.DraftInboxScreen
 import com.example.localledger.ui.ledger.LedgerManageScreen
 import com.example.localledger.ui.recurring.RecurringRuleScreen
+import com.example.localledger.ui.backup.BackupScreen
+import com.example.localledger.ui.exporting.ExportScreen
+import com.example.localledger.ui.lock.AppLockSettingsScreen
 import com.example.localledger.ui.settings.SettingsScreen
 import com.example.localledger.ui.statistics.StatisticsScreen
 import kotlinx.coroutines.launch
@@ -87,6 +90,9 @@ object Routes {
     const val IMPORT = "import"
     const val AUTO_RECORD = "auto-record"
     const val DRAFTS = "drafts"
+    const val BACKUP = "backup"
+    const val EXPORT = "export"
+    const val APP_LOCK = "app-lock"
     const val TRANSACTIONS_PATTERN =
         "transactions?type={type}&categoryId={categoryId}&accountId={accountId}" +
             "&startDate={startDate}&endDate={endDate}"
@@ -283,6 +289,15 @@ fun AppNavHost(appSession: AppSession, pendingNavigation: PendingNavigation) {
                 }
                 composable(Routes.DRAFTS) {
                     DraftInboxScreen(navController = navController)
+                }
+                composable(Routes.BACKUP) {
+                    BackupScreen(navController = navController)
+                }
+                composable(Routes.EXPORT) {
+                    ExportScreen(navController = navController)
+                }
+                composable(Routes.APP_LOCK) {
+                    AppLockSettingsScreen(navController = navController)
                 }
                 composable(
                     route = Routes.CATEGORIES,

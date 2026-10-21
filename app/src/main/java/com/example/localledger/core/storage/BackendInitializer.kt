@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.room.withTransaction
 import com.example.localledger.data.local.database.DatabaseProvider
 import com.example.localledger.data.local.database.PresetData
+import com.example.localledger.data.work.AutoBackupScheduler
 import com.example.localledger.data.work.RecurringWorkScheduler
 import com.example.localledger.domain.error.LedgerException
 import com.example.localledger.domain.usecase.GenerateRecurringTransactionsUseCase
@@ -84,6 +85,11 @@ class BackendInitializer @Inject constructor(
     private suspend fun catchUp() {
         try {
             RecurringWorkScheduler.schedule(context)
+            val autoBackup = settingsStore.peek()
+            AutoBackupScheduler.sync(
+                context,
+                autoBackup?.autoBackupEnabled == true && !autoBackup.autoBackupTreeUri.isNullOrBlank(),
+            )
             generateRecurring()
         } catch (error: CancellationException) {
             throw error

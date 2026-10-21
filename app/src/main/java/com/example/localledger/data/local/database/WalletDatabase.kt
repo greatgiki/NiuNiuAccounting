@@ -7,6 +7,7 @@ import com.example.localledger.data.local.converter.RoomConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.localledger.data.local.dao.AccountDao
+import com.example.localledger.data.local.dao.BackupDao
 import com.example.localledger.data.local.dao.BudgetDao
 import com.example.localledger.data.local.dao.CategoryDao
 import com.example.localledger.data.local.dao.ExchangeRateDao
@@ -25,6 +26,8 @@ import com.example.localledger.data.local.entity.RecurringOccurrenceEntity
 import com.example.localledger.data.local.entity.RecurringRuleEntity
 import com.example.localledger.data.local.entity.TransactionEntity
 
+internal const val WALLET_SCHEMA_VERSION = 5
+
 @Database(
     entities = [
         LedgerEntity::class,
@@ -38,7 +41,7 @@ import com.example.localledger.data.local.entity.TransactionEntity
         ExchangeRateHistoryEntity::class,
         PendingDraftEntity::class,
     ],
-    version = 5,
+    version = WALLET_SCHEMA_VERSION,
     exportSchema = true,
 )
 @TypeConverters(RoomConverters::class)
@@ -51,9 +54,11 @@ abstract class WalletDatabase : RoomDatabase() {
     abstract fun recurringRuleDao(): RecurringRuleDao
     abstract fun exchangeRateDao(): ExchangeRateDao
     abstract fun pendingDraftDao(): PendingDraftDao
+    abstract fun backupDao(): BackupDao
 
     companion object {
         const val FILE_NAME = "ledger.db"
+        const val SCHEMA_VERSION = WALLET_SCHEMA_VERSION
         val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
 
         val INTEGRITY_CALLBACK = object : Callback() {
