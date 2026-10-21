@@ -20,12 +20,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Backspace
-import androidx.compose.material.icons.filled.SwapHoriz
-import androidx.compose.material.icons.filled.AccessTime
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.Backspace
+import androidx.compose.material.icons.outlined.AccessTime
+import androidx.compose.material.icons.outlined.DateRange
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -42,7 +42,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -61,7 +60,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -77,6 +76,10 @@ import com.example.localledger.domain.money.CurrencyCatalog
 import com.example.localledger.ui.AppSession
 import com.example.localledger.ui.common.DateTimeFormatters
 import com.example.localledger.ui.component.AmountField
+import com.example.localledger.ui.component.LedgerSnackbarHost
+import com.example.localledger.ui.component.rememberLedgerHaptic
+import com.example.localledger.ui.theme.LedgerMotion
+import com.example.localledger.ui.theme.LocalLedgerDarkTheme
 import com.example.localledger.ui.component.CategoryIconGrid
 import com.example.localledger.ui.component.ConfirmDeleteDialog
 import com.example.localledger.ui.component.SubmitGate
@@ -114,19 +117,19 @@ fun TransactionEditorScreen(
                 title = { Text(if (state.isEdit) "编辑记录" else "记一笔") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
                     }
                 },
                 actions = {
                     if (state.isEdit) {
                         IconButton(onClick = { showDeleteConfirm = true }) {
-                            Icon(Icons.Default.Delete, contentDescription = "删除记录")
+                            Icon(Icons.Outlined.Delete, contentDescription = "删除记录")
                         }
                     }
                 },
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = { LedgerSnackbarHost(snackbarHostState) },
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             when {
@@ -201,6 +204,7 @@ private fun EditorContent(
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
             TransactionType.entries.forEachIndexed { index, type ->
                 val active = amountColor(type)
+                val onActive = if (LocalLedgerDarkTheme.current) Color(0xFF1C1915) else Color(0xFFFFF9F2)
                 SegmentedButton(
                     selected = input.type == type,
                     onClick = { viewModel.onTypeChange(type) },
@@ -210,7 +214,7 @@ private fun EditorContent(
                     ),
                     colors = SegmentedButtonDefaults.colors(
                         activeContainerColor = active,
-                        activeContentColor = Color.White,
+                        activeContentColor = onActive,
                         activeBorderColor = active,
                     ),
                 ) {
@@ -283,7 +287,7 @@ private fun EditorContent(
                         modifier = Modifier.weight(1f),
                     )
                     IconButton(onClick = viewModel::swapTransferAccounts) {
-                        Icon(Icons.Filled.SwapHoriz, contentDescription = "交换账户")
+                        Icon(Icons.Outlined.SwapHoriz, contentDescription = "交换账户")
                     }
                     AccountSelector(
                         label = "转入账户",
@@ -330,7 +334,7 @@ private fun EditorContent(
                     modifier = Modifier.weight(1f).heightIn(min = 48.dp),
                 ) {
                     Icon(
-                        Icons.Default.DateRange,
+                        Icons.Outlined.DateRange,
                         contentDescription = "选择日期",
                         modifier = Modifier.size(18.dp),
                     )
@@ -347,7 +351,7 @@ private fun EditorContent(
                     modifier = Modifier.weight(1f).heightIn(min = 48.dp),
                 ) {
                     Icon(
-                        Icons.Default.AccessTime,
+                        Icons.Outlined.AccessTime,
                         contentDescription = "选择时间",
                         modifier = Modifier.size(18.dp),
                     )
@@ -370,9 +374,11 @@ private fun EditorContent(
             Spacer(Modifier.height(12.dp))
         }
 
+        val onAmountKey = remember(viewModel) { { key: String -> viewModel.onAmountKey(key) } }
+        val onSave = remember(viewModel) { { viewModel.save() } }
         AmountKeypad(
-            onKey = viewModel::onAmountKey,
-            onSave = viewModel::save,
+            onKey = onAmountKey,
+            onSave = onSave,
             saveEnabled = state.canSave && !input.saving,
             saveLabel = when {
                 input.saving -> "保存中…"
@@ -450,25 +456,29 @@ internal fun AmountKeypad(
 ) {
     val keyHeight = 48.dp
     val gap = 6.dp
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(gap)) {
+    val haptic = rememberLedgerHaptic()
+    Column(
+        modifier = modifier.semantics { contentDescription = "金额键盘" },
+        verticalArrangement = Arrangement.spacedBy(gap),
+    ) {
         Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
             listOf("1", "2", "3").forEach { key ->
-                KeypadKey(key, onClick = { onKey(key) }, modifier = Modifier.weight(1f).height(keyHeight))
+                KeypadKey(key, onClick = { haptic(); onKey(key) }, modifier = Modifier.weight(1f).height(keyHeight))
             }
             KeypadKey(
                 label = "",
-                onClick = { onKey("backspace") },
+                onClick = { haptic(); onKey("backspace") },
                 modifier = Modifier.weight(1f).height(keyHeight),
                 icon = {
-                    Icon(Icons.AutoMirrored.Filled.Backspace, contentDescription = "退格")
+                    Icon(Icons.AutoMirrored.Outlined.Backspace, contentDescription = "退格")
                 },
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
             listOf("4", "5", "6").forEach { key ->
-                KeypadKey(key, onClick = { onKey(key) }, modifier = Modifier.weight(1f).height(keyHeight))
+                KeypadKey(key, onClick = { haptic(); onKey(key) }, modifier = Modifier.weight(1f).height(keyHeight))
             }
-            KeypadKey("清空", onClick = { onKey("clear") }, modifier = Modifier.weight(1f).height(keyHeight))
+            KeypadKey("清空", onClick = { haptic(); onKey("clear") }, modifier = Modifier.weight(1f).height(keyHeight))
         }
         Row(
             modifier = Modifier.fillMaxWidth().height(keyHeight * 2 + gap),
@@ -480,17 +490,20 @@ internal fun AmountKeypad(
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(gap), modifier = Modifier.weight(1f)) {
                     listOf("7", "8", "9").forEach { key ->
-                        KeypadKey(key, onClick = { onKey(key) }, modifier = Modifier.weight(1f).fillMaxHeight())
+                        KeypadKey(key, onClick = { haptic(); onKey(key) }, modifier = Modifier.weight(1f).fillMaxHeight())
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(gap), modifier = Modifier.weight(1f)) {
-                    KeypadKey(".", onClick = { onKey(".") }, modifier = Modifier.weight(1f).fillMaxHeight())
-                    KeypadKey("0", onClick = { onKey("0") }, modifier = Modifier.weight(2f).fillMaxHeight())
+                    KeypadKey(".", onClick = { haptic(); onKey(".") }, modifier = Modifier.weight(1f).fillMaxHeight())
+                    KeypadKey("0", onClick = { haptic(); onKey("0") }, modifier = Modifier.weight(2f).fillMaxHeight())
                 }
             }
             KeypadKey(
                 label = saveLabel,
-                onClick = { onSave?.invoke() },
+                onClick = {
+                    haptic()
+                    onSave?.invoke()
+                },
                 enabled = onSave != null && saveEnabled,
                 container = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -512,7 +525,11 @@ private fun KeypadKey(
 ) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed && enabled) 0.94f else 1f, label = "key-press")
+    val scale by animateFloatAsState(
+        targetValue = if (pressed && enabled) 0.96f else 1f,
+        animationSpec = LedgerMotion.short(),
+        label = "key-press",
+    )
     Surface(
         onClick = onClick,
         enabled = enabled,
@@ -521,7 +538,10 @@ private fun KeypadKey(
         contentColor = contentColor,
         interactionSource = interaction,
         modifier = modifier
-            .scale(scale)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
             .semantics { contentDescription = if (label.isEmpty()) "退格" else label },
     ) {
         Box(contentAlignment = Alignment.Center) {

@@ -13,20 +13,18 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.filled.TrendingDown
-import androidx.compose.material.icons.automirrored.filled.TrendingUp
-import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.EventRepeat
-import androidx.compose.material.icons.filled.FileDownload
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.filled.Savings
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.automirrored.outlined.TrendingDown
+import androidx.compose.material.icons.automirrored.outlined.TrendingUp
+import androidx.compose.material.icons.outlined.AccountBalanceWallet
+import androidx.compose.material.icons.outlined.EventRepeat
+import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Savings
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
@@ -54,6 +52,8 @@ import com.example.localledger.R
 import com.example.localledger.core.storage.ThemeMode
 import com.example.localledger.domain.model.CategoryType
 import com.example.localledger.ui.AppSession
+import com.example.localledger.ui.component.LedgerCard
+import com.example.localledger.ui.component.LedgerHairline
 import com.example.localledger.ui.component.SubmitGate
 import com.example.localledger.ui.home.SectionTitle
 import com.example.localledger.ui.navigation.Routes
@@ -75,35 +75,35 @@ fun SettingsScreen(
             .padding(horizontal = 16.dp),
     ) {
         SectionTitle("账本与分类")
-        Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
-            SettingsEntry("账本管理", Icons.AutoMirrored.Filled.MenuBook) { navController.navigate(Routes.LEDGERS) }
-            HorizontalDivider()
-            SettingsEntry("账户管理", Icons.Default.AccountBalanceWallet) { navController.navigate(Routes.ACCOUNTS) }
-            HorizontalDivider()
-            SettingsEntry("支出分类", Icons.AutoMirrored.Filled.TrendingDown) {
+        LedgerCard(modifier = Modifier.fillMaxWidth()) {
+            SettingsEntry("账本管理", Icons.AutoMirrored.Outlined.MenuBook) { navController.navigate(Routes.LEDGERS) }
+            LedgerHairline()
+            SettingsEntry("账户管理", Icons.Outlined.AccountBalanceWallet) { navController.navigate(Routes.ACCOUNTS) }
+            LedgerHairline()
+            SettingsEntry("支出分类", Icons.AutoMirrored.Outlined.TrendingDown) {
                 navController.navigate(Routes.categories(CategoryType.EXPENSE))
             }
-            HorizontalDivider()
-            SettingsEntry("收入分类", Icons.AutoMirrored.Filled.TrendingUp) {
+            LedgerHairline()
+            SettingsEntry("收入分类", Icons.AutoMirrored.Outlined.TrendingUp) {
                 navController.navigate(Routes.categories(CategoryType.INCOME))
             }
-            HorizontalDivider()
-            SettingsEntry("预算", Icons.Default.Savings) { navController.navigate(Routes.BUDGETS) }
-            HorizontalDivider()
-            SettingsEntry("周期记账", Icons.Default.EventRepeat) { navController.navigate(Routes.RECURRING) }
+            LedgerHairline()
+            SettingsEntry("预算", Icons.Outlined.Savings) { navController.navigate(Routes.BUDGETS) }
+            LedgerHairline()
+            SettingsEntry("周期记账", Icons.Outlined.EventRepeat) { navController.navigate(Routes.RECURRING) }
         }
 
         SectionTitle("账单")
-        Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
-            SettingsEntry("导入账单", Icons.Default.FileDownload) { navController.navigate(Routes.IMPORT) }
-            HorizontalDivider()
-            SettingsEntry("自动记账", Icons.Default.Notifications) { navController.navigate(Routes.AUTO_RECORD) }
+        LedgerCard(modifier = Modifier.fillMaxWidth()) {
+            SettingsEntry("导入账单", Icons.Outlined.FileDownload) { navController.navigate(Routes.IMPORT) }
+            LedgerHairline()
+            SettingsEntry("自动记账", Icons.Outlined.Notifications) { navController.navigate(Routes.AUTO_RECORD) }
         }
 
         ExchangeRateSection()
 
         SectionTitle("外观")
-        Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
+        LedgerCard(modifier = Modifier.fillMaxWidth()) {
             SingleChoiceSegmentedButtonRow(
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
             ) {
@@ -126,7 +126,7 @@ fun SettingsScreen(
         }
 
         SectionTitle("数据与隐私")
-        Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
+        LedgerCard(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
                     "数据仅保存在本机",
@@ -146,7 +146,7 @@ fun SettingsScreen(
         }
 
         SectionTitle("关于")
-        Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
+        LedgerCard(modifier = Modifier.fillMaxWidth()) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -154,7 +154,7 @@ fun SettingsScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
-                    Icons.Default.Info,
+                    Icons.Outlined.Info,
                     contentDescription = null,
                     modifier = Modifier.size(22.dp),
                     tint = MaterialTheme.colorScheme.primary,
@@ -183,7 +183,7 @@ private fun ExchangeRateSection(viewModel: ExchangeRateViewModel = hiltViewModel
         viewModel.effects.collect { message = it }
     }
     SectionTitle("汇率")
-    Card(modifier = Modifier.fillMaxWidth()) {
+    LedgerCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("本位币 ${state.currencyCode}", style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(4.dp))
@@ -289,7 +289,7 @@ private fun SettingsEntry(label: String, icon: ImageVector, onClick: () -> Unit)
         Spacer(Modifier.size(12.dp))
         Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Icon(
-            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            Icons.AutoMirrored.Outlined.KeyboardArrowRight,
             contentDescription = "进入$label",
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )

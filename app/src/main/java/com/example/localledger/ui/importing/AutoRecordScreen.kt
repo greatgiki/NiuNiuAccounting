@@ -17,7 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Card
+import com.example.localledger.ui.component.LedgerCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -118,7 +118,7 @@ fun AutoRecordScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
         ) {
-            Card(modifier = Modifier.fillMaxWidth()) {
+            LedgerCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     SettingSwitch(
                         title = "开启自动记账",
@@ -201,7 +201,7 @@ fun AutoRecordScreen(
                 }
             }
             Spacer(Modifier.height(12.dp))
-            Card(modifier = Modifier.fillMaxWidth()) {
+            LedgerCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text("电池优化", style = MaterialTheme.typography.titleSmall)
                     Spacer(Modifier.height(4.dp))
@@ -219,7 +219,7 @@ fun AutoRecordScreen(
             }
             if (guide != null) {
                 Spacer(Modifier.height(12.dp))
-                Card(modifier = Modifier.fillMaxWidth()) {
+                LedgerCard(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(guide.title, style = MaterialTheme.typography.titleSmall)
                         Spacer(Modifier.height(4.dp))
@@ -233,7 +233,7 @@ fun AutoRecordScreen(
                 }
             }
             Spacer(Modifier.height(12.dp))
-            Card(modifier = Modifier.fillMaxWidth()) {
+            LedgerCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text("最近收到的通知", style = MaterialTheme.typography.titleSmall)
                     Spacer(Modifier.height(4.dp))
@@ -261,7 +261,7 @@ fun AutoRecordScreen(
                 }
             }
             Spacer(Modifier.height(12.dp))
-            Card(modifier = Modifier.fillMaxWidth()) {
+            LedgerCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text("隐私", style = MaterialTheme.typography.titleSmall)
                     Spacer(Modifier.height(4.dp))

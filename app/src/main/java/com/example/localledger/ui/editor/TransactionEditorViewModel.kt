@@ -1,5 +1,6 @@
 package com.example.localledger.ui.editor
 
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -48,6 +49,7 @@ sealed interface EditorEffect {
     data class ShowMessage(val message: String) : EditorEffect
 }
 
+@Immutable
 data class EditorInput(
     val type: TransactionType = TransactionType.EXPENSE,
     val amountText: String = "",
@@ -66,6 +68,7 @@ data class EditorInput(
     val notFound: Boolean = false,
 )
 
+@Immutable
 data class EditorUiState(
     val isEdit: Boolean,
     val isLoading: Boolean = true,

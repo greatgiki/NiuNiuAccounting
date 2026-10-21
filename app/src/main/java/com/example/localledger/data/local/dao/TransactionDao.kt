@@ -35,6 +35,9 @@ interface TransactionDao {
     @Query("DELETE FROM transactions WHERE id = :id AND ledger_id = :ledgerId")
     suspend fun deleteById(id: String, ledgerId: String): Int
 
+    @Query("SELECT COUNT(*) FROM transactions WHERE ledger_id = :ledgerId")
+    suspend fun countInLedger(ledgerId: String): Int
+
     @Query("SELECT * FROM transactions WHERE ledger_id = :ledgerId ORDER BY transaction_at ASC, created_at ASC")
     suspend fun listByLedger(ledgerId: String): List<TransactionEntity>
 

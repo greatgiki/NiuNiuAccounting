@@ -15,7 +15,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import com.example.localledger.ui.component.LedgerCard
+import com.example.localledger.ui.component.LedgerSnackbarHost
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -69,7 +70,7 @@ fun BillImportScreen(
                 },
             )
         },
-        snackbarHost = { SnackbarHost(snackbar) },
+        snackbarHost = { LedgerSnackbarHost(snackbar) },
     ) { padding ->
         if (state.loading) {
             LoadingState()
@@ -151,7 +152,7 @@ private fun ImportRowCard(
     viewModel: BillImportViewModel,
 ) {
     val categories = if (row.type == TransactionType.INCOME) state.incomeCategories else state.expenseCategories
-    Card(modifier = Modifier.fillMaxWidth()) {
+    LedgerCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(

@@ -9,14 +9,15 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Card
+import com.example.localledger.ui.component.LedgerCard
+import com.example.localledger.ui.component.LedgerSnackbarHost
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -52,7 +53,15 @@ fun DraftInboxScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(Unit) {
-        viewModel.effects.collect { snackbar.showSnackbar(it) }
+        viewModel.effects.collect { effect ->
+            when (effect) {
+                is DraftInboxEffect.Message -> snackbar.showSnackbar(effect.text)
+                is DraftInboxEffect.Dismissed -> {
+                    val result = snackbar.showSnackbar(effect.text, actionLabel = "撤销")
+                    if (result == SnackbarResult.ActionPerformed) viewModel.restore(effect.draftId)
+                }
+            }
+        }
     }
     Scaffold(
         topBar = {
@@ -65,7 +74,7 @@ fun DraftInboxScreen(
                 },
             )
         },
-        snackbarHost = { SnackbarHost(snackbar) },
+        snackbarHost = { LedgerSnackbarHost(snackbar) },
     ) { padding ->
         when {
             !state.ready -> LoadingState()
@@ -88,7 +97,7 @@ private fun DraftCard(
     viewModel: DraftInboxViewModel,
 ) {
     val categories = draftCategories(draft, state)
-    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+    LedgerCard(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
@@ -152,7 +161,7 @@ fun PendingDraftBanner(
 ) {
     val badge by viewModel.badge.collectAsStateWithLifecycle()
     if (badge.count <= 0) return
-    Card(
+    LedgerCard(
         modifier = modifier.fillMaxWidth().padding(vertical = 8.dp),
         onClick = { navController.navigate(Routes.DRAFTS) },
     ) {
