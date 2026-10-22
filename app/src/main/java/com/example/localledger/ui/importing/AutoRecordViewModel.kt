@@ -18,7 +18,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class AutoRecordViewModel @Inject constructor(
-    diagnostics: NotificationDiagnosticsStore,
+    private val diagnostics: NotificationDiagnosticsStore,
     private val pipeline: NotificationCapturePipeline,
 ) : ViewModel() {
     val connected: StateFlow<Boolean> = NotificationListenerHealth.connected
@@ -26,6 +26,10 @@ class AutoRecordViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     private val lastTest = MutableStateFlow<String?>(null)
     val testMessage: StateFlow<String?> = lastTest.asStateFlow()
+
+    fun clearDiagnostics() {
+        viewModelScope.launch { diagnostics.clear() }
+    }
 
     fun simulate() {
         viewModelScope.launch {

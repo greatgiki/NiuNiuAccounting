@@ -13,4 +13,6 @@
         <item name="windowSplashScreenIconBackgroundColor">@color/ic_launcher_background</item>
         <item name="postSplashScreenTheme">@style/Theme.LocalLedger</item>
     </style>
+
+    <style name="Theme.LocalLedger.Biometric" parent="android:Theme.Translucent.NoTitleBar" />
 </resources>

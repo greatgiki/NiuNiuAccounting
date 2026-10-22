@@ -238,11 +238,12 @@ fun AutoRecordScreen(
                     Text("最近收到的通知", style = MaterialTheme.typography.titleSmall)
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "只保存在本机，最多 20 条微信或支付宝通知，用来看有没有收到、以及为什么没记上。测试按钮会走真实开关和解析；能生成草稿但真机付款没反应时，多半是监听没连上。",
+                        "只保存在本机，最多 20 条微信或支付宝通知，用来看有没有收到、以及为什么没记上。金额和商户名会打码后再保存。测试按钮会走真实开关和解析；能生成草稿但真机付款没反应时，多半是监听没连上。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     TextButton(onClick = viewModel::simulate) { Text("测试") }
+                    TextButton(onClick = viewModel::clearDiagnostics, enabled = recent.isNotEmpty()) { Text("清除记录") }
                     testMessage?.let { message ->
                         Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
                     }
