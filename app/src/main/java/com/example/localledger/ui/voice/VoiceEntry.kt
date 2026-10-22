@@ -30,6 +30,7 @@ import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
@@ -145,7 +146,9 @@ private sealed interface VoicePhase {
         val drafts: List<EditableVoiceDraft>,
         val saving: Boolean,
         val error: String?,
+        val notice: String? = null,
     ) : VoicePhase
+    data class Resolving(val text: String) : VoicePhase
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -167,6 +170,7 @@ fun VoiceBookkeeping(
     val income = incomeSnapshot.active
     val accounts = accountSnapshot.active
     val zoneId = viewModel.zoneId
+    val aiOn by viewModel.aiAssistEnabled.collectAsStateWithLifecycle()
     val phaseState = remember { mutableStateOf<VoicePhase>(VoicePhase.Starting) }
     var phase by phaseState
     var listenToken by remember { mutableIntStateOf(0) }
@@ -174,14 +178,27 @@ fun VoiceBookkeeping(
     val finishJob = remember { mutableStateOf<Job?>(null) }
     val haptic = rememberLedgerHaptic()
 
-    suspend fun reviewOf(text: String): VoicePhase {
-        val drafts = viewModel.parseVoice(text).map { draft ->
+    suspend fun reviewOf(text: String, forceAi: Boolean = false): VoicePhase {
+        if (aiOn && (forceAi || !viewModel.localIsConfident(text))) {
+            phaseState.value = VoicePhase.Resolving(text)
+        }
+        val outcome = viewModel.interpretUtterance(text, forceAi)
+        val drafts = outcome.drafts.map { draft ->
             draft.toEditable(defaultAccountId, accounts, zoneId)
         }
         return if (drafts.isEmpty()) {
-            VoicePhase.Typing("没有听出可以记账的内容。可以改成「午饭35，打车20」，或直接输入。", text)
+            VoicePhase.Typing(
+                outcome.notice ?: "没有听出可以记账的内容。可以改成「午饭35，打车20」，或直接输入。",
+                text,
+            )
         } else {
-            VoicePhase.Review(heard = text, drafts = drafts, saving = false, error = null)
+            VoicePhase.Review(
+                heard = text,
+                drafts = drafts,
+                saving = false,
+                error = null,
+                notice = outcome.notice,
+            )
         }
     }
 
@@ -269,7 +286,7 @@ fun VoiceBookkeeping(
     }
 
     val sheetPhase = phase
-    if (sheetPhase is VoicePhase.Listening || sheetPhase is VoicePhase.Typing || sheetPhase is VoicePhase.Review) {
+    if (sheetPhase is VoicePhase.Listening || sheetPhase is VoicePhase.Typing || sheetPhase is VoicePhase.Review || sheetPhase is VoicePhase.Resolving) {
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         ModalBottomSheet(
             onDismissRequest = {
@@ -316,14 +333,28 @@ fun VoiceBookkeeping(
                         if (trimmed.isEmpty()) return@TypingBody
                         scope.launch { phase = reviewOf(trimmed) }
                     },
+                    onAi = if (!aiOn) {
+                        null
+                    } else {
+                        {
+                            val trimmed = sheetPhase.text.trim()
+                            if (trimmed.isNotEmpty()) scope.launch { phase = reviewOf(trimmed, forceAi = true) }
+                        }
+                    },
                     onCancel = onDismiss,
                 )
+                is VoicePhase.Resolving -> ResolvingBody(onCancel = onDismiss)
                 is VoicePhase.Review -> ReviewBody(
                     phase = sheetPhase,
                     expense = expense,
                     income = income,
                     accounts = accounts,
                     onChange = { next -> phase = next },
+                    onAi = if (!aiOn) {
+                        null
+                    } else {
+                        { scope.launch { phase = reviewOf(sheetPhase.heard, forceAi = true) } }
+                    },
                     onCancel = onDismiss,
                     onConfirm = {
                         val problem = sheetPhase.drafts.firstNotNullOfOrNull { it.problem(expense, income, accounts) }
@@ -458,6 +489,7 @@ private fun TypingBody(
     text: String,
     onText: (String) -> Unit,
     onSubmit: () -> Unit,
+    onAi: (() -> Unit)?,
     onCancel: () -> Unit,
 ) {
     val focus = remember { FocusRequester() }
@@ -492,7 +524,36 @@ private fun TypingBody(
         ) {
             Text("解析")
         }
+        if (onAi != null) {
+            OutlinedButton(
+                onClick = onAi,
+                enabled = text.isNotBlank(),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+            ) { Text("AI 解析") }
+        }
         TextButton(onClick = onCancel, modifier = Modifier.align(Alignment.End)) { Text("取消") }
+    }
+}
+
+@Composable
+private fun ResolvingBody(onCancel: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 28.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(28.dp),
+            strokeWidth = 2.dp,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Text("正在用 AI 整理草稿…", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp))
+        Text(
+            "只发送这句话和分类、账户的名称",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        TextButton(onClick = onCancel, modifier = Modifier.padding(top = 8.dp).heightIn(min = 48.dp)) { Text("取消") }
     }
 }
 
@@ -504,6 +565,7 @@ private fun ReviewBody(
     income: List<Category>,
     accounts: List<Account>,
     onChange: (VoicePhase.Review) -> Unit,
+    onAi: (() -> Unit)?,
     onCancel: () -> Unit,
     onConfirm: () -> Unit,
 ) {
@@ -531,6 +593,14 @@ private fun ReviewBody(
                 style = MaterialTheme.typography.bodyMedium,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+        }
+        if (!phase.notice.isNullOrBlank()) {
+            Text(
+                phase.notice,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 12.dp),
             )
         }
@@ -564,6 +634,11 @@ private fun ReviewBody(
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
         ) {
             Text(if (phase.saving) "保存中…" else "确认记入")
+        }
+        if (onAi != null) {
+            TextButton(onClick = onAi, enabled = !phase.saving, modifier = Modifier.heightIn(min = 48.dp)) {
+                Text("AI 解析")
+            }
         }
         TextButton(
             onClick = onCancel,

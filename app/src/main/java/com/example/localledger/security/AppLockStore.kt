@@ -34,7 +34,9 @@ interface SecretBox {
     fun open(sealed: ByteArray): ByteArray
 }
 
-class KeystoreSecretBox : SecretBox {
+class KeystoreSecretBox(
+    private val alias: String = ALIAS,
+) : SecretBox {
     override fun seal(plain: ByteArray): ByteArray {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key())
@@ -56,10 +58,10 @@ class KeystoreSecretBox : SecretBox {
 
     private fun key(): SecretKey {
         val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-        (keyStore.getKey(ALIAS, null) as? SecretKey)?.let { return it }
+        (keyStore.getKey(alias, null) as? SecretKey)?.let { return it }
         val generator = KeyGenerator.getInstance(android.security.keystore.KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
         val spec = android.security.keystore.KeyGenParameterSpec.Builder(
-            ALIAS,
+            alias,
             android.security.keystore.KeyProperties.PURPOSE_ENCRYPT or
                 android.security.keystore.KeyProperties.PURPOSE_DECRYPT,
         )

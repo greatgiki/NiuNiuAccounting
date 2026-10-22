@@ -76,6 +76,8 @@ import com.example.localledger.ui.recurring.RecurringRuleScreen
 import com.example.localledger.ui.backup.BackupScreen
 import com.example.localledger.ui.exporting.ExportScreen
 import com.example.localledger.ui.lock.AppLockSettingsScreen
+import com.example.localledger.ui.ai.AiSettingsScreen
+import com.example.localledger.ui.ai.LedgerQaScreen
 import com.example.localledger.ui.settings.MerchantCategoryScreen
 import com.example.localledger.ui.settings.SettingsScreen
 import com.example.localledger.ui.report.PeriodReportScreen
@@ -100,6 +102,8 @@ object Routes {
     const val BACKUP = "backup"
     const val EXPORT = "export"
     const val APP_LOCK = "app-lock"
+    const val AI = "ai-settings"
+    const val ASK = "ask-ledger"
     const val CALENDAR = "calendar"
     const val MERCHANT_CATEGORIES = "merchant-categories"
     const val REPORT = "report/{kind}?anchor={anchor}"
@@ -323,6 +327,12 @@ fun AppNavHost(
                 }
                 composable(Routes.APP_LOCK) {
                     AppLockSettingsScreen(navController = navController)
+                }
+                composable(Routes.AI) {
+                    AiSettingsScreen(navController = navController)
+                }
+                composable(Routes.ASK) {
+                    LedgerQaScreen(navController = navController)
                 }
                 composable(Routes.CALENDAR) {
                     CalendarScreen(navController = navController)
