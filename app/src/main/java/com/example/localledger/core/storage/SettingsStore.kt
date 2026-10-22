@@ -29,6 +29,10 @@ data class AppSettings(
     val alipayNotificationEnabled: Boolean = true,
     val keepAmountlessDrafts: Boolean = true,
     val importAccountIdBySource: Map<String, String> = emptyMap(),
+    val appLockTimeoutMinutes: Int = 1,
+    val autoBackupEnabled: Boolean = false,
+    val autoBackupTreeUri: String? = null,
+    val autoBackupKeepCount: Int = 5,
 ) {
     fun importAccountKey(ledgerId: String, source: String) = "$ledgerId|$source"
 

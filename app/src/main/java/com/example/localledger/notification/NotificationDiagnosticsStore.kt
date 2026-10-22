@@ -65,8 +65,8 @@ class NotificationDiagnosticsStore @Inject constructor(
             receivedAt = System.currentTimeMillis(),
             packageName = event.packageName,
             postedAt = event.postedAt,
-            excerpt = event.text.replace('\n', ' ').take(180),
-            outcome = summary + result.describe(),
+            excerpt = NotificationRedactor.redact(event.text).replace('\n', ' ').take(180),
+            outcome = NotificationRedactor.redact(summary + result.describe()),
             patternId = patternId,
         )
         mutex.withLock {
@@ -77,10 +77,28 @@ class NotificationDiagnosticsStore @Inject constructor(
         }
     }
 
+    suspend fun clear() {
+        mutex.withLock {
+            loaded = true
+            entries.value = emptyList()
+            withContext(Dispatchers.IO) {
+                if (file.exists() && !file.delete()) file.writeText("[]")
+            }
+        }
+    }
+
     private fun ensureLoaded() {
         if (loaded) return
-        entries.value = read()
+        val raw = read()
+        val masked = raw.map { item ->
+            item.copy(
+                excerpt = NotificationRedactor.redact(item.excerpt),
+                outcome = NotificationRedactor.redact(item.outcome),
+            )
+        }
+        entries.value = masked
         loaded = true
+        if (masked != raw) write(masked)
     }
 
     private fun read(): List<NotificationDiagnostic> {

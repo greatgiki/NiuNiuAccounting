@@ -14,6 +14,18 @@
 -keep class com.example.localledger.notification.DraftActionReceiver_GeneratedInjector { *; }
 -keep class * extends android.service.notification.NotificationListenerService { *; }
 -keep class com.example.localledger.data.work.RecurringTransactionWorker { *; }
+-keep class com.example.localledger.data.work.AutoBackupWorker { *; }
+-keep class com.example.localledger.security.BiometricUnlockActivity { *; }
+
+-keepclassmembers class com.example.localledger.data.backup.** {
+    *** Companion;
+}
+-keep class com.example.localledger.data.backup.**$$serializer { *; }
+-keepclassmembers class com.example.localledger.security.PinRecord {
+    <init>(...);
+    *** Companion;
+}
+-keep class com.example.localledger.security.PinRecord$$serializer { *; }
 
 -keepattributes *Annotation*, Signature, InnerClasses, EnclosingMethod, RuntimeVisibleAnnotations, RuntimeVisibleParameterAnnotations
 
