@@ -5,7 +5,8 @@ import com.example.localledger.domain.importing.AccountHintMapper
 import com.example.localledger.domain.importing.BillFileParser
 import com.example.localledger.domain.importing.BillParseResult
 import com.example.localledger.domain.importing.CandidateKind
-import com.example.localledger.domain.importing.CategoryKeywordMapper
+import com.example.localledger.domain.importing.CategoryGuess
+import com.example.localledger.domain.importing.MerchantKey
 import com.example.localledger.domain.importing.DraftStatus
 import com.example.localledger.domain.importing.DuplicateFlag
 import com.example.localledger.domain.importing.ExternalKey
@@ -17,7 +18,6 @@ import com.example.localledger.domain.importing.ParsedBillRow
 import com.example.localledger.domain.importing.RecordOrigin
 import com.example.localledger.domain.model.Account
 import com.example.localledger.domain.model.Category
-import com.example.localledger.domain.model.CategoryType
 import com.example.localledger.domain.model.SaveTransactionCommand
 import com.example.localledger.domain.model.TransactionType
 import com.example.localledger.domain.repository.TransactionRepository
@@ -56,6 +56,7 @@ data class ImportCommitResult(
 class BillImportRepository @Inject constructor(
     private val databaseProvider: WalletDatabaseSource,
     private val transactionRepository: TransactionRepository,
+    private val merchantCategories: MerchantCategoryBook,
     private val clock: Clock,
     private val zoneIdProvider: ZoneIdProvider,
 ) {
@@ -103,6 +104,8 @@ class BillImportRepository @Inject constructor(
         }
         val candidates = transactions + drafts
         val seenInFile = mutableSetOf<ExternalKey>()
+        val expenseMemory = merchantCategories.keys(ledgerId, TransactionType.EXPENSE)
+        val incomeMemory = merchantCategories.keys(ledgerId, TransactionType.INCOME)
         return parsed.rows.mapIndexed { index, row ->
             val key = row.externalId.trim()
             val inFile = key.isNotEmpty() && ExternalKey(row.source.name, key) in seenInFile
@@ -121,10 +124,12 @@ class BillImportRepository @Inject constructor(
             }
             if (key.isNotEmpty()) seenInFile += ExternalKey(row.source.name, key)
             val account = AccountHintMapper.suggest(row.paymentMethod, row.source, accounts, defaultAccountId)
+            val memory = if (row.type == TransactionType.INCOME) incomeMemory else expenseMemory
+            val mapped = memory[MerchantKey.normalize(row.counterparty)]
             PreparedImportRow(
                 index = index,
                 row = row,
-                categoryId = resolveCategory(categories, row.type, CategoryKeywordMapper.suggestName(row.type, row.keywordText)),
+                categoryId = CategoryGuess.idFor(row.type, row.keywordText, categories, mapped),
                 accountId = account.accountId,
                 accountFromPaymentMethod = account.matchedPaymentMethod,
                 flag = match.flag,
@@ -173,6 +178,7 @@ class BillImportRepository @Inject constructor(
                     categoryId = categoryId,
                     transactionAt = item.row.transactionAt,
                     note = ImportNote.compose(item.row.counterparty, item.row.goods, item.row.note),
+                    counterparty = item.row.counterparty,
                     externalSource = if (externalId == null) null else sourceName,
                     externalId = externalId,
                     origin = RecordOrigin.IMPORT,
@@ -229,9 +235,4 @@ class BillImportRepository @Inject constructor(
         return if (updated == 1) transactionId else null
     }
 
-    private fun resolveCategory(categories: List<Category>, type: TransactionType, name: String): String? {
-        val categoryType = if (type == TransactionType.INCOME) CategoryType.INCOME else CategoryType.EXPENSE
-        val active = categories.filter { !it.isArchived && it.type == categoryType }
-        return active.firstOrNull { it.name == name }?.id ?: active.firstOrNull { it.name == "其他" }?.id
-    }
 }

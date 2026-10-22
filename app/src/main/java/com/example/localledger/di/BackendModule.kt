@@ -33,6 +33,8 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import com.example.localledger.security.KeystoreSecretBox
+import com.example.localledger.security.SecretBox
 import java.time.Clock
 import javax.inject.Qualifier
 import javax.inject.Singleton
@@ -65,6 +67,10 @@ object BackendModule {
     @Provides
     @Singleton
     fun clock(): Clock = Clock.systemUTC()
+
+    @Provides
+    @Singleton
+    fun secretBox(): SecretBox = KeystoreSecretBox()
 
     @Provides
     @Singleton

@@ -29,6 +29,12 @@ data class AppSettings(
     val alipayNotificationEnabled: Boolean = true,
     val keepAmountlessDrafts: Boolean = true,
     val importAccountIdBySource: Map<String, String> = emptyMap(),
+    val appLockTimeoutMinutes: Int = 1,
+    val autoBackupEnabled: Boolean = false,
+    val autoBackupTreeUri: String? = null,
+    val autoBackupKeepCount: Int = 5,
+    /** When the app lock is on, the home-screen widget replaces amounts with dots. */
+    val widgetMaskAmountsWhenLocked: Boolean = true,
 ) {
     fun importAccountKey(ledgerId: String, source: String) = "$ledgerId|$source"
 

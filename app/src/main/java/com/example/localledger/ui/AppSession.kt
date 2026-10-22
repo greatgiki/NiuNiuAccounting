@@ -9,6 +9,7 @@ import com.example.localledger.di.ApplicationScope
 import com.example.localledger.domain.error.LedgerException
 import com.example.localledger.domain.model.Ledger
 import com.example.localledger.domain.repository.LedgerRepository
+import com.example.localledger.widget.LedgerWidgetRefresher
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -48,6 +49,7 @@ class AppSession @Inject constructor(
     private val backendInitializer: BackendInitializer,
     private val settingsStore: SettingsStore,
     private val ledgerRepository: LedgerRepository,
+    private val widgetRefresher: LedgerWidgetRefresher,
     @ApplicationScope private val scope: CoroutineScope,
 ) {
     private val settingsFlow = MutableStateFlow<AppSettings?>(null)
@@ -81,6 +83,7 @@ class AppSession @Inject constructor(
 
     suspend fun switchLedger(ledgerId: String) {
         settingsFlow.value = settingsStore.update { it.copy(currentLedgerId = ledgerId) }
+        widgetRefresher.request()
     }
 
     suspend fun createLedgerAndSwitch(name: String) {
@@ -96,8 +99,8 @@ class AppSession @Inject constructor(
         settingsFlow.value = settingsStore.update { it.copy(hasAcknowledgedDataLoss = true) }
     }
 
-    suspend fun updateSettings(transform: (com.example.localledger.core.storage.AppSettings) -> com.example.localledger.core.storage.AppSettings) {
-        settingsFlow.value = settingsStore.update(transform)
+    suspend fun updateSettings(transform: (AppSettings) -> AppSettings): AppSettings {
+        return settingsStore.update(transform).also { settingsFlow.value = it }
     }
 
     suspend fun recordLastAccount(ledgerId: String, accountId: String) {

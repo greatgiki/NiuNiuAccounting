@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  previewImage is a PNG on purpose. HyperOS/MIUI decodes the picker preview
+  with BitmapFactory and drops the provider when that decode fails, so a
+  vector is not enough. previewLayout stays for Android 12+ hosts.
+  Do not add miuiWidget=true: Xiaomi then hides the provider from the
+  Android widget list unless the widget was published in their store.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/widget_description"
+    android:initialLayout="@layout/ledger_widget_loading"
+    android:minWidth="250dp"
+    android:minHeight="110dp"
+    android:minResizeWidth="250dp"
+    android:minResizeHeight="110dp"
+    android:previewImage="@drawable/widget_ledger_preview"
+    android:previewLayout="@layout/ledger_widget_preview"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellWidth="4"
+    android:targetCellHeight="2"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen" />

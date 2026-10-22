@@ -55,7 +55,7 @@ class RecurringResumeDeleteTest {
         val ledgers = LedgerRepositoryImpl(source, clock)
         val accounts = AccountRepositoryImpl(source, clock)
         val categories = CategoryRepositoryImpl(source, clock)
-        val transactions = TransactionRepositoryImpl(source, ExchangeRateRepositoryImpl(source), clock)
+        val transactions = TransactionRepositoryImpl(source, ExchangeRateRepositoryImpl(source), clock, com.example.localledger.data.repository.MerchantCategoryBook(source, clock))
         rules = RecurringRuleRepositoryImpl(source, clock)
         val generate = GenerateRecurringTransactionsUseCase(
             rules = rules,

@@ -116,6 +116,8 @@ data class VoiceDraftSave(
     val date: LocalDate,
     val time: LocalTime,
     val note: String,
+    val merchant: String? = null,
+    val baselineCategoryId: String? = null,
 )
 
 @Immutable
@@ -129,6 +131,8 @@ internal data class EditableVoiceDraft(
     val time: LocalTime,
     val note: String,
     val heardCategory: String?,
+    val merchant: String? = null,
+    val baselineCategoryId: String? = null,
 )
 
 private sealed interface VoicePhase {
@@ -170,7 +174,7 @@ fun VoiceBookkeeping(
     val finishJob = remember { mutableStateOf<Job?>(null) }
     val haptic = rememberLedgerHaptic()
 
-    fun reviewOf(text: String): VoicePhase {
+    suspend fun reviewOf(text: String): VoicePhase {
         val drafts = viewModel.parseVoice(text).map { draft ->
             draft.toEditable(defaultAccountId, accounts, zoneId)
         }
@@ -193,10 +197,10 @@ fun VoiceBookkeeping(
     }
     val intentLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val text = result.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty()
-        phase = if (result.resultCode == Activity.RESULT_OK && text.isNotBlank()) {
-            reviewOf(text)
+        if (result.resultCode == Activity.RESULT_OK && text.isNotBlank()) {
+            scope.launch { phase = reviewOf(text) }
         } else {
-            VoicePhase.Typing("没有识别到内容。请使用输入法上的语音键，或直接输入。", text)
+            phase = VoicePhase.Typing("没有识别到内容。请使用输入法上的语音键，或直接输入。", text)
         }
     }
 
@@ -222,10 +226,13 @@ fun VoiceBookkeeping(
 
                     override fun onFinal(text: String) {
                         if (phaseState.value !is VoicePhase.Listening) return
-                        phaseState.value = if (text.isBlank()) {
-                            VoicePhase.Listening("", "没听清。请再说一次，或直接输入。")
+                        if (text.isBlank()) {
+                            phaseState.value = VoicePhase.Listening("", "没听清。请再说一次，或直接输入。")
                         } else {
-                            reviewOf(text)
+                            scope.launch {
+                                if (phaseState.value !is VoicePhase.Listening) return@launch
+                                phaseState.value = reviewOf(text)
+                            }
                         }
                     }
 
@@ -307,7 +314,7 @@ fun VoiceBookkeeping(
                     onSubmit = {
                         val trimmed = sheetPhase.text.trim()
                         if (trimmed.isEmpty()) return@TypingBody
-                        phase = reviewOf(trimmed)
+                        scope.launch { phase = reviewOf(trimmed) }
                     },
                     onCancel = onDismiss,
                 )
@@ -780,6 +787,8 @@ private fun EditableVoiceDraft.toSave() = VoiceDraftSave(
     date = date,
     time = time,
     note = note.trim(),
+    merchant = merchant,
+    baselineCategoryId = baselineCategoryId,
 )
 
 internal fun VoiceLedgerDraft.toEditable(
@@ -802,5 +811,7 @@ internal fun VoiceLedgerDraft.toEditable(
         time = now.withSecond(0).withNano(0),
         note = note.take(200),
         heardCategory = categoryName.takeIf { categoryId == null && !it.isNullOrBlank() },
+        merchant = merchant?.take(40),
+        baselineCategoryId = categoryId,
     )
 }

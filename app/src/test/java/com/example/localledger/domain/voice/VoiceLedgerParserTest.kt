@@ -133,6 +133,77 @@ class VoiceLedgerParserTest {
     }
 
     @Test
+    fun userMerchantOverridesBeatSameLengthKeywordGuesses() {
+        val meituan = VoiceMerchantOverride("美团", "shop", TransactionType.EXPENSE)
+        val delivery = parse("美团外卖35", merchantOverrides = listOf(meituan)).single()
+        assertEquals("shop", delivery.categoryId)
+        assertEquals("美团", delivery.merchant)
+        assertEquals("外卖", delivery.note)
+
+        val starbucks = VoiceMerchantOverride("星巴克", "fun", TransactionType.EXPENSE)
+        val coffee = parse("星巴克30", merchantOverrides = listOf(starbucks)).single()
+        assertEquals("fun", coffee.categoryId)
+        assertEquals("星巴克", coffee.merchant)
+        assertEquals("", coffee.note)
+
+        val missing = parse("美团35", merchantOverrides = listOf(VoiceMerchantOverride("美团", "gone", TransactionType.EXPENSE))).single()
+        assertEquals("food", missing.categoryId)
+        assertNull(missing.merchant)
+
+        val wrongType = parse(
+            "美团35",
+            merchantOverrides = listOf(VoiceMerchantOverride("美团", "salary", TransactionType.EXPENSE)),
+        ).single()
+        assertEquals("food", wrongType.categoryId)
+        assertNull(wrongType.merchant)
+
+        val untouched = parse("美团外卖35").single()
+        assertEquals("food", untouched.categoryId)
+        assertNull(untouched.merchant)
+
+        val named = parse("餐饮美团20", merchantOverrides = listOf(meituan)).single()
+        assertEquals("food", named.categoryId)
+        assertEquals("美团", named.merchant)
+    }
+
+    @Test
+    fun longerCategoryNameBeatsAShorterMerchantOverride() {
+        val custom = categories + expense("sb-coffee", "星巴克咖啡")
+        val rule = VoiceMerchantOverride("星巴克", "shop", TransactionType.EXPENSE)
+        val draft = parse("星巴克咖啡40", categories = custom, merchantOverrides = listOf(rule)).single()
+        assertEquals("sb-coffee", draft.categoryId)
+        assertEquals("星巴克", draft.merchant)
+    }
+
+    @Test
+    fun incomeMerchantOverrideSelectsThatCategory() {
+        val rule = VoiceMerchantOverride("年终", "bonus", TransactionType.INCOME)
+        val draft = parse("年终8000", merchantOverrides = listOf(rule)).single()
+        assertEquals(TransactionType.INCOME, draft.type)
+        assertEquals("bonus", draft.categoryId)
+        assertEquals("年终", draft.merchant)
+        assertYuan("8000", draft)
+    }
+
+    @Test
+    fun merchantOverrideSplitsWithTheNextItem() {
+        val rule = VoiceMerchantOverride("美团", "shop", TransactionType.EXPENSE)
+        val drafts = parse("美团35和打车20", merchantOverrides = listOf(rule))
+        assertEquals(listOf("shop", "traffic"), drafts.map { it.categoryId })
+        assertEquals("美团", drafts[0].merchant)
+        assertNull(drafts[1].merchant)
+    }
+
+    @Test
+    fun latinMerchantKeyMatchesIgnoringCase() {
+        val rule = VoiceMerchantOverride("starbucks", "fun", TransactionType.EXPENSE)
+        val draft = parse("Starbucks 18", merchantOverrides = listOf(rule)).single()
+        assertEquals("fun", draft.categoryId)
+        assertEquals("Starbucks", draft.merchant)
+        assertYuan("18", draft)
+    }
+
+    @Test
     fun accountNamesAndASingleCard() {
         assertEquals("wx", only("微信午饭35").accountId)
         assertEquals("ali", only("支付宝打车20").accountId)
@@ -223,7 +294,8 @@ class VoiceLedgerParserTest {
         day: LocalDate = today,
         categories: List<VoiceCategoryRef> = this.categories,
         accounts: List<VoiceAccountRef> = this.accounts,
-    ) = VoiceLedgerParser.parse(utterance, categories, accounts, day)
+        merchantOverrides: List<VoiceMerchantOverride> = emptyList(),
+    ) = VoiceLedgerParser.parse(utterance, categories, accounts, day, merchantOverrides)
 
     private fun expense(id: String, name: String) = VoiceCategoryRef(id, name, CategoryType.EXPENSE)
 

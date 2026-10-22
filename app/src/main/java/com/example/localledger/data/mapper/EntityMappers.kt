@@ -52,7 +52,7 @@ fun Category.toEntity() = CategoryEntity(
 fun TransactionEntity.toDomain() = Transaction(
     id, ledgerId, type, amountMinor, accountId, toAccountId, categoryId,
     transactionAt, note, createdAt, updatedAt, toAmountMinor, baseAmountMinor, fxRate,
-    externalSource, externalId, origin,
+    externalSource, externalId, origin, counterparty,
 )
 
 fun AccountBalanceRow.toDomain() = AccountBalance(account.toDomain(), balanceMinor)
