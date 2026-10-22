@@ -2,7 +2,9 @@
 <!--
   previewImage is a PNG on purpose. HyperOS/MIUI decodes the picker preview
   with BitmapFactory and drops the provider when that decode fails, so a
-  vector is not enough. previewLayout stays for Android 12+ hosts.
+  vector is not enough. Its corners are transparent, using the 20dp fallback
+  radius (a bitmap cannot reference system_app_widget_background_radius).
+  previewLayout stays for Android 12+ hosts and uses the same rounded shape.
   Do not add miuiWidget=true: Xiaomi then hides the provider from the
   Android widget list unless the widget was published in their store.
 -->
