@@ -5,6 +5,7 @@ import com.example.localledger.data.local.entity.PendingDraftEntity
 import com.example.localledger.domain.importing.BillSource
 import com.example.localledger.domain.importing.DraftStatus
 import com.example.localledger.domain.importing.ImportNote
+import com.example.localledger.domain.importing.MerchantMemoryPolicy
 import com.example.localledger.domain.importing.RecordOrigin
 import com.example.localledger.domain.model.SaveTransactionCommand
 import com.example.localledger.domain.model.TransactionType
@@ -65,6 +66,7 @@ class DraftRepository @Inject constructor(
     private val databaseProvider: WalletDatabaseSource,
     private val transactionRepository: TransactionRepository,
     private val clock: Clock,
+    private val merchantCategories: MerchantCategoryBook,
 ) {
     fun observePending(ledgerId: String): Flow<List<PendingDraft>> = flow {
         emitAll(
@@ -142,7 +144,21 @@ class DraftRepository @Inject constructor(
     }
 
     suspend fun updateAssignment(id: String, categoryId: String?, accountId: String?) {
-        databaseProvider.get().pendingDraftDao().updateAssignment(id, categoryId, accountId, clock.millis())
+        val database = databaseProvider.get()
+        val existing = database.pendingDraftDao().findById(id) ?: return
+        database.pendingDraftDao().updateAssignment(id, categoryId, accountId, clock.millis())
+        val changed = categoryId != existing.categoryId
+        if (
+            MerchantMemoryPolicy.shouldRemember(
+                type = existing.type,
+                merchant = existing.counterparty,
+                categoryId = categoryId,
+                previousCategoryId = existing.categoryId,
+                categoryChanged = changed,
+            )
+        ) {
+            merchantCategories.remember(existing.ledgerId, existing.type, existing.counterparty.orEmpty(), categoryId!!)
+        }
     }
 
     suspend fun dismiss(id: String) {
@@ -178,6 +194,7 @@ class DraftRepository @Inject constructor(
                 transactionAt = existing.transactionAt,
                 note = existing.note ?: existing.counterparty,
                 origin = RecordOrigin.NOTIFICATION,
+                counterparty = existing.counterparty,
             ),
         )
         database.pendingDraftDao().updateStatus(id, DraftStatus.CONFIRMED, transactionId, clock.millis())

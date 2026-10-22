@@ -24,6 +24,7 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Savings
+import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material.icons.outlined.SettingsBackupRestore
 import androidx.compose.material.icons.outlined.TableChart
 import androidx.compose.material3.AlertDialog
@@ -94,6 +95,8 @@ fun SettingsScreen(
             SettingsEntry("预算", Icons.Outlined.Savings) { navController.navigate(Routes.BUDGETS) }
             LedgerHairline()
             SettingsEntry("周期记账", Icons.Outlined.EventRepeat) { navController.navigate(Routes.RECURRING) }
+            LedgerHairline()
+            SettingsEntry("商家分类", Icons.Outlined.Storefront) { navController.navigate(Routes.MERCHANT_CATEGORIES) }
         }
 
         SectionTitle("账单")

@@ -153,6 +153,7 @@ data class TransactionEntity(
     @ColumnInfo(name = "external_source") val externalSource: String? = null,
     @ColumnInfo(name = "external_id") val externalId: String? = null,
     @ColumnInfo(name = "origin", defaultValue = "'MANUAL'") val origin: String = RecordOrigin.MANUAL,
+    val counterparty: String? = null,
 )
 
 @Entity(
@@ -326,6 +327,39 @@ data class ExchangeRateSnapshotEntity(
     @ColumnInfo(name = "rates_json") val ratesJson: String,
     @ColumnInfo(name = "fetched_at") val fetchedAt: Long,
     val source: String,
+)
+
+@Entity(
+    tableName = "merchant_category_rules",
+    foreignKeys = [
+        ForeignKey(
+            entity = LedgerEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["ledger_id"],
+            onDelete = ForeignKey.RESTRICT,
+            onUpdate = ForeignKey.RESTRICT,
+        ),
+        ForeignKey(
+            entity = CategoryEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["category_id"],
+            onDelete = ForeignKey.RESTRICT,
+            onUpdate = ForeignKey.RESTRICT,
+        ),
+    ],
+    indices = [
+        Index(value = ["ledger_id", "merchant_key", "type"], unique = true),
+        Index(value = ["category_id"]),
+    ],
+)
+data class MerchantCategoryRuleEntity(
+    @PrimaryKey val id: String,
+    @ColumnInfo(name = "ledger_id") val ledgerId: String,
+    @ColumnInfo(name = "merchant_key") val merchantKey: String,
+    @ColumnInfo(name = "merchant_label") val merchantLabel: String,
+    val type: TransactionType,
+    @ColumnInfo(name = "category_id") val categoryId: String,
+    @ColumnInfo(name = "updated_at") val updatedAt: Long,
 )
 
 @Entity(

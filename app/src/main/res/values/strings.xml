@@ -2,4 +2,19 @@
 <resources>
     <string name="app_name">牛牛记账</string>
     <string name="notification_listener_label">牛牛记账通知监听</string>
+    <string name="widget_name">牛牛记账</string>
+    <string name="widget_description">今日和本月的收入、支出、结余，以及记一笔</string>
+    <string name="widget_add">记一笔</string>
+    <string name="widget_today">今日</string>
+    <string name="widget_month">本月</string>
+    <string name="widget_income">收入</string>
+    <string name="widget_expense">支出</string>
+    <string name="widget_balance">结余</string>
+    <string name="widget_preview_today_income">¥128.00</string>
+    <string name="widget_preview_today_expense">¥48.00</string>
+    <string name="widget_preview_today_balance">¥80.00</string>
+    <string name="widget_preview_month_income">¥1280.00</string>
+    <string name="widget_preview_month_expense">¥365.00</string>
+    <string name="widget_preview_month_balance">¥915.00</string>
+    <string name="widget_loading">牛牛记账</string>
 </resources>

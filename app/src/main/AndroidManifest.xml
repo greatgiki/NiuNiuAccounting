@@ -51,5 +51,18 @@
         <receiver
             android:name=".notification.DraftActionReceiver"
             android:exported="false" />
+        <receiver
+            android:name=".widget.LedgerSummaryWidgetReceiver"
+            android:exported="true"
+            android:enabled="true"
+            android:label="@string/widget_name"
+            android:description="@string/widget_description">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/ledger_widget_info" />
+        </receiver>
     </application>
 </manifest>
