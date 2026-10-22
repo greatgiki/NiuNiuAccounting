@@ -4,9 +4,11 @@ import com.example.localledger.domain.model.Account
 import com.example.localledger.domain.model.AccountBalance
 import com.example.localledger.domain.model.Budget
 import com.example.localledger.domain.model.Category
+import com.example.localledger.domain.model.CategoryFrequency
 import com.example.localledger.domain.model.CategoryTotal
 import com.example.localledger.domain.model.CategoryType
 import com.example.localledger.domain.model.DailyTotal
+import com.example.localledger.domain.model.LargestExpense
 import com.example.localledger.domain.model.DateTimeRange
 import com.example.localledger.domain.model.ExchangeRateSnapshot
 import com.example.localledger.domain.model.IncomeExpenseSummary
@@ -60,6 +62,8 @@ interface StatisticsRepository {
     fun observeIncomeCategories(ledgerId: String, range: DateTimeRange): Flow<List<CategoryTotal>>
     fun observeDailyTrend(ledgerId: String, range: DateTimeRange): Flow<List<DailyTotal>>
     fun observeMonthlyTrend(ledgerId: String, year: Int): Flow<List<MonthlyTotal>>
+    fun observeLargestExpense(ledgerId: String, range: DateTimeRange): Flow<LargestExpense?>
+    fun observeExpenseFrequency(ledgerId: String, range: DateTimeRange): Flow<List<CategoryFrequency>>
 }
 
 interface BudgetRepository {

@@ -99,6 +99,7 @@ import com.example.localledger.ui.theme.LocalLedgerTheme
 import com.example.localledger.ui.theme.LocalLedgerTones
 import com.example.localledger.ui.theme.amountColor
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 import java.time.YearMonth
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -137,13 +138,28 @@ fun HomeScreen(
                 )
             }
             item(key = "calendar", contentType = "calendar") {
-                TextButton(
-                    onClick = { navController.navigate(Routes.CALENDAR) },
-                    modifier = Modifier.padding(top = 4.dp),
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(Icons.Outlined.CalendarMonth, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("日历")
+                    TextButton(onClick = { navController.navigate(Routes.CALENDAR) }) {
+                        Icon(Icons.Outlined.CalendarMonth, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("日历")
+                    }
+                    TextButton(
+                        onClick = {
+                            navController.navigate(Routes.weekReport(LocalDate.now(viewModel.zoneId)))
+                        },
+                        modifier = Modifier.semantics { contentDescription = "生成本周周报" },
+                    ) {
+                        Text("周报")
+                    }
+                    TextButton(
+                        onClick = { navController.navigate(Routes.monthReport(state.yearMonth.atDay(1))) },
+                    ) {
+                        Text("月报")
+                    }
                 }
             }
             item(key = "drafts", contentType = "drafts") {
