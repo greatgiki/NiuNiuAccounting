@@ -78,3 +78,18 @@ data class TrendSourceRow(
     @ColumnInfo(name = "amount_minor") val amountMinor: Long,
 )
 
+data class LargestExpenseRow(
+    @ColumnInfo(name = "category_name") val categoryName: String,
+    @ColumnInfo(name = "amount_minor") val amountMinor: Long,
+    @ColumnInfo(name = "transaction_at") val transactionAt: Long,
+    val note: String?,
+)
+
+data class CategoryFrequencyRow(
+    @ColumnInfo(name = "category_id") val categoryId: String,
+    @ColumnInfo(name = "category_name") val categoryName: String,
+    @ColumnInfo(name = "icon_key") val iconKey: String,
+    @ColumnInfo(name = "expense_count") val expenseCount: Long,
+    @ColumnInfo(name = "amount_minor") val amountMinor: Long,
+)
+

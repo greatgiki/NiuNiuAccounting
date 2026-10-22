@@ -1,6 +1,7 @@
 package com.example.localledger.ui.common
 
 import com.example.localledger.domain.money.CurrencyCatalog
+import com.example.localledger.domain.money.MinorText
 import java.math.BigInteger
 import java.time.Instant
 import java.time.LocalDate
@@ -14,21 +15,8 @@ object MoneyFormatter {
     private val MIN_LONG = BigInteger.valueOf(Long.MIN_VALUE)
     private val MAX_LONG = BigInteger.valueOf(Long.MAX_VALUE)
 
-    fun format(amountMinor: Long, currencyCode: String = "CNY"): String {
-        val spec = CurrencyCatalog.of(currencyCode)
-        val negative = amountMinor < 0
-        val abs = BigInteger.valueOf(amountMinor).abs()
-        val factor = BigInteger.TEN.pow(spec.minorDigits)
-        val major = if (spec.minorDigits == 0) abs else abs.divide(factor)
-        val fraction = if (spec.minorDigits == 0) 0 else abs.remainder(factor).toInt()
-        val sign = if (negative) "-" else ""
-        val digits = if (spec.minorDigits == 0) {
-            "$major"
-        } else {
-            "$major.${fraction.toString().padStart(spec.minorDigits, '0')}"
-        }
-        return "$sign${spec.symbol}$digits"
-    }
+    fun format(amountMinor: Long, currencyCode: String = "CNY"): String =
+        MinorText.format(amountMinor, currencyCode)
 
     fun formatSigned(amountMinor: Long, positive: Boolean, currencyCode: String = "CNY"): String {
         val body = format(amountMinor, currencyCode).removePrefix("-")
