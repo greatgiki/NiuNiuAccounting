@@ -3,10 +3,12 @@ package com.example.localledger.data.repository
 import com.example.localledger.data.local.database.WalletDatabaseSource
 import com.example.localledger.data.mapper.toDomain
 import com.example.localledger.domain.error.LedgerException
+import com.example.localledger.domain.model.CategoryFrequency
 import com.example.localledger.domain.model.CategoryTotal
 import com.example.localledger.domain.model.DailyTotal
 import com.example.localledger.domain.model.DateTimeRange
 import com.example.localledger.domain.model.IncomeExpenseSummary
+import com.example.localledger.domain.model.LargestExpense
 import com.example.localledger.domain.model.MonthlyTotal
 import com.example.localledger.domain.model.TransactionType
 import com.example.localledger.domain.repository.StatisticsRepository
@@ -118,6 +120,51 @@ class StatisticsRepositoryImpl @Inject constructor(
             throw LedgerException.ArithmeticOverflow()
         }
         return income to expense
+    }
+
+    override fun observeLargestExpense(
+        ledgerId: String,
+        range: DateTimeRange,
+    ): Flow<LargestExpense?> = flow {
+        emitAll(
+            databaseProvider.get().transactionDao().observeLargestExpense(
+                ledgerId,
+                range.startInclusive,
+                range.endExclusive,
+            ).map { rows ->
+                val row = rows.firstOrNull() ?: return@map null
+                val zone = dateRangeResolver.zoneId()
+                LargestExpense(
+                    categoryName = row.categoryName,
+                    amountMinor = row.amountMinor,
+                    date = Instant.ofEpochMilli(row.transactionAt).atZone(zone).toLocalDate(),
+                    note = row.note?.takeIf { it.isNotBlank() },
+                )
+            },
+        )
+    }
+
+    override fun observeExpenseFrequency(
+        ledgerId: String,
+        range: DateTimeRange,
+    ): Flow<List<CategoryFrequency>> = flow {
+        emitAll(
+            databaseProvider.get().transactionDao().observeExpenseFrequency(
+                ledgerId,
+                range.startInclusive,
+                range.endExclusive,
+            ).map { rows ->
+                rows.map { row ->
+                    CategoryFrequency(
+                        categoryId = row.categoryId,
+                        categoryName = row.categoryName,
+                        iconKey = row.iconKey,
+                        count = row.expenseCount.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt(),
+                        amountMinor = row.amountMinor,
+                    )
+                }
+            },
+        )
     }
 }
 

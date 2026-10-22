@@ -3,8 +3,10 @@ package com.example.localledger.domain.model
 import androidx.compose.runtime.Immutable
 
 import java.math.BigDecimal
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
+import java.time.temporal.TemporalAdjusters
 
 enum class TransactionType { EXPENSE, INCOME, TRANSFER }
 
@@ -96,6 +98,19 @@ data class DateTimeRange(
 
 sealed interface StatisticsPeriod {
     data class Day(val date: LocalDate) : StatisticsPeriod
+
+    /** ISO week, Monday through Sunday. China uses Monday as the first day of the week. */
+    data class Week(val weekStart: LocalDate) : StatisticsPeriod {
+        init {
+            require(weekStart.dayOfWeek == DayOfWeek.MONDAY) { "ISO week starts on Monday" }
+        }
+
+        companion object {
+            fun containing(date: LocalDate): Week =
+                Week(date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)))
+        }
+    }
+
     data class Month(val yearMonth: YearMonth) : StatisticsPeriod
     data class Year(val year: Int) : StatisticsPeriod
     data class Custom(val startDate: LocalDate, val endDate: LocalDate) : StatisticsPeriod
@@ -147,10 +162,28 @@ data class CategoryTotal(
     val amountMinor: Long,
 )
 
+@Immutable
 data class DailyTotal(
     val date: LocalDate,
     val incomeMinor: Long,
     val expenseMinor: Long,
+)
+
+@Immutable
+data class LargestExpense(
+    val categoryName: String,
+    val amountMinor: Long,
+    val date: LocalDate,
+    val note: String?,
+)
+
+@Immutable
+data class CategoryFrequency(
+    val categoryId: String,
+    val categoryName: String,
+    val iconKey: String,
+    val count: Int,
+    val amountMinor: Long,
 )
 
 data class MonthlyTotal(

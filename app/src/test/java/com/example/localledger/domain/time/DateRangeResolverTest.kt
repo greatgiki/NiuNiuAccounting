@@ -2,6 +2,7 @@ package com.example.localledger.domain.time
 
 import com.example.localledger.domain.error.LedgerException
 import com.example.localledger.domain.model.StatisticsPeriod
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
@@ -76,6 +77,26 @@ class DateRangeResolverTest {
     @Test(expected = LedgerException.InvalidDateRange::class)
     fun rejectsReversedOptionalRange() {
         resolver.resolveOptional(LocalDate.of(2026, 7, 22), LocalDate.of(2026, 7, 21))
+    }
+
+    @Test
+    fun isoWeekRunsMondayThroughSundayInShanghai() {
+        val wednesday = LocalDate.of(2026, 7, 22)
+        assertEquals(DayOfWeek.WEDNESDAY, wednesday.dayOfWeek)
+        val range = resolver.resolve(StatisticsPeriod.Week.containing(wednesday))
+        assertEquals(Instant.parse("2026-07-19T16:00:00Z").toEpochMilli(), range.startInclusive)
+        assertEquals(Instant.parse("2026-07-26T16:00:00Z").toEpochMilli(), range.endExclusive)
+        assertEquals(
+            range,
+            resolver.resolve(StatisticsPeriod.Week(LocalDate.of(2026, 7, 20))),
+        )
+    }
+
+    @Test
+    fun isoWeekCanCrossTheCalendarYear() {
+        val range = resolver.resolve(StatisticsPeriod.Week.containing(LocalDate.of(2027, 1, 1)))
+        assertEquals(Instant.parse("2026-12-27T16:00:00Z").toEpochMilli(), range.startInclusive)
+        assertEquals(Instant.parse("2027-01-03T16:00:00Z").toEpochMilli(), range.endExclusive)
     }
 
     @Test(expected = LedgerException.InvalidDateRange::class)

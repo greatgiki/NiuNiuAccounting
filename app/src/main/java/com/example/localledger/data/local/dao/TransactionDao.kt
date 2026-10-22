@@ -4,11 +4,13 @@ import androidx.room.Dao
 import androidx.room.Query
 import androidx.room.Upsert
 import com.example.localledger.data.local.entity.TransactionEntity
+import com.example.localledger.data.local.model.CategoryFrequencyRow
 import com.example.localledger.data.local.model.CategoryTotalRow
 import com.example.localledger.data.local.model.DayAmountRow
 import com.example.localledger.data.local.model.ExternalKeyRow
 import com.example.localledger.data.local.model.FuzzyTransactionRow
 import com.example.localledger.data.local.model.IncomeExpenseSummaryRow
+import com.example.localledger.data.local.model.LargestExpenseRow
 import com.example.localledger.data.local.model.TransactionDetailRow
 import com.example.localledger.data.local.model.TrendSourceRow
 import com.example.localledger.domain.model.TransactionType
@@ -280,5 +282,52 @@ interface TransactionDao {
         startInclusive: Long,
         endExclusive: Long,
     ): Flow<List<TrendSourceRow>>
+
+    @Query(
+        """
+        SELECT
+            COALESCE(c.name, '未分类') AS category_name,
+            t.base_amount_minor AS amount_minor,
+            t.transaction_at AS transaction_at,
+            t.note AS note
+        FROM transactions t
+        LEFT JOIN categories c ON c.id = t.category_id
+        WHERE t.ledger_id = :ledgerId
+          AND t.type = 'EXPENSE'
+          AND t.transaction_at >= :startInclusive
+          AND t.transaction_at < :endExclusive
+        ORDER BY t.base_amount_minor DESC, t.transaction_at DESC, t.id DESC
+        LIMIT 1
+        """,
+    )
+    fun observeLargestExpense(
+        ledgerId: String,
+        startInclusive: Long,
+        endExclusive: Long,
+    ): Flow<List<LargestExpenseRow>>
+
+    @Query(
+        """
+        SELECT
+            c.id AS category_id,
+            c.name AS category_name,
+            c.icon_key AS icon_key,
+            COUNT(*) AS expense_count,
+            SUM(t.base_amount_minor) AS amount_minor
+        FROM transactions t
+        JOIN categories c ON c.id = t.category_id
+        WHERE t.ledger_id = :ledgerId
+          AND t.type = 'EXPENSE'
+          AND t.transaction_at >= :startInclusive
+          AND t.transaction_at < :endExclusive
+        GROUP BY c.id, c.name, c.icon_key
+        ORDER BY expense_count DESC, amount_minor DESC, c.name ASC
+        """,
+    )
+    fun observeExpenseFrequency(
+        ledgerId: String,
+        startInclusive: Long,
+        endExclusive: Long,
+    ): Flow<List<CategoryFrequencyRow>>
 }
 

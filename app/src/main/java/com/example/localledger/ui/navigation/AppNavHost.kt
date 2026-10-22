@@ -78,6 +78,7 @@ import com.example.localledger.ui.exporting.ExportScreen
 import com.example.localledger.ui.lock.AppLockSettingsScreen
 import com.example.localledger.ui.settings.MerchantCategoryScreen
 import com.example.localledger.ui.settings.SettingsScreen
+import com.example.localledger.ui.report.PeriodReportScreen
 import com.example.localledger.ui.statistics.StatisticsScreen
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -101,6 +102,11 @@ object Routes {
     const val APP_LOCK = "app-lock"
     const val CALENDAR = "calendar"
     const val MERCHANT_CATEGORIES = "merchant-categories"
+    const val REPORT = "report/{kind}?anchor={anchor}"
+
+    fun weekReport(anchor: LocalDate): String = "report/week?anchor=$anchor"
+
+    fun monthReport(anchor: LocalDate): String = "report/month?anchor=$anchor"
     const val TRANSACTIONS_PATTERN =
         "transactions?type={type}&categoryId={categoryId}&accountId={accountId}" +
             "&startDate={startDate}&endDate={endDate}"
@@ -320,6 +326,19 @@ fun AppNavHost(
                 }
                 composable(Routes.CALENDAR) {
                     CalendarScreen(navController = navController)
+                }
+                composable(
+                    route = Routes.REPORT,
+                    arguments = listOf(
+                        navArgument("kind") { type = NavType.StringType },
+                        navArgument("anchor") {
+                            type = NavType.StringType
+                            nullable = true
+                            defaultValue = null
+                        },
+                    ),
+                ) {
+                    PeriodReportScreen(navController = navController)
                 }
                 composable(Routes.MERCHANT_CATEGORIES) {
                     MerchantCategoryScreen(navController = navController)

@@ -10,6 +10,7 @@ import com.example.localledger.domain.model.MonthlyTotal
 import com.example.localledger.domain.model.StatisticsPeriod
 import com.example.localledger.domain.repository.AccountRepository
 import com.example.localledger.domain.repository.BudgetRepository
+import com.example.localledger.domain.report.weekPeriodLabel
 import com.example.localledger.domain.repository.StatisticsRepository
 import com.example.localledger.domain.statistics.TrendFill
 import com.example.localledger.domain.time.DateRangeResolver
@@ -208,22 +209,9 @@ class StatisticsViewModel @Inject constructor(
     ): List<TrendPoint> {
         val byDate = days.associateBy { it.date }
         return when (period) {
-            is StatisticsPeriod.Month -> {
-                val first = period.yearMonth.atDay(1)
-                val last = period.yearMonth.atEndOfMonth()
-                generateSequence(first) { it.plusDays(1) }
-                    .takeWhile { !it.isAfter(last) }
-                    .map { date ->
-                        val day = byDate[date]
-                        TrendPoint(
-                            label = DateTimeFormatters.dayShort(date),
-                            startDate = date,
-                            endDate = date,
-                            incomeMinor = day?.incomeMinor ?: 0,
-                            expenseMinor = day?.expenseMinor ?: 0,
-                        )
-                    }.toList()
-            }
+            is StatisticsPeriod.Week -> dailyPoints(period.weekStart, period.weekStart.plusDays(6), byDate)
+            is StatisticsPeriod.Month ->
+                dailyPoints(period.yearMonth.atDay(1), period.yearMonth.atEndOfMonth(), byDate)
             is StatisticsPeriod.Custom -> {
                 val totalDays = period.startDate.until(period.endDate).days.toLong() + 1
                 if (totalDays <= MAX_DAILY_TREND_DAYS) {
@@ -266,8 +254,26 @@ class StatisticsViewModel @Inject constructor(
         }
     }
 
+    private fun dailyPoints(
+        first: LocalDate,
+        last: LocalDate,
+        byDate: Map<LocalDate, DailyTotal>,
+    ): List<TrendPoint> = generateSequence(first) { it.plusDays(1) }
+        .takeWhile { !it.isAfter(last) }
+        .map { date ->
+            val day = byDate[date]
+            TrendPoint(
+                label = DateTimeFormatters.dayShort(date),
+                startDate = date,
+                endDate = date,
+                incomeMinor = day?.incomeMinor ?: 0,
+                expenseMinor = day?.expenseMinor ?: 0,
+            )
+        }.toList()
+
     private fun periodText(period: StatisticsPeriod): String = when (period) {
         is StatisticsPeriod.Day -> DateTimeFormatters.date(period.date)
+        is StatisticsPeriod.Week -> weekPeriodLabel(period.weekStart)
         is StatisticsPeriod.Month -> DateTimeFormatters.yearMonth(period.yearMonth)
         is StatisticsPeriod.Year -> "${period.year}年"
         is StatisticsPeriod.Custom ->
