@@ -4,7 +4,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -90,12 +92,12 @@ object Routes {
     const val TRANSACTIONS_PATTERN =
         "transactions?type={type}&categoryId={categoryId}&accountId={accountId}" +
             "&startDate={startDate}&endDate={endDate}"
-    const val TRANSACTION_NEW = "transaction/new?type={type}"
+    const val TRANSACTION_NEW = "transaction/new?type={type}&voice={voice}"
     const val TRANSACTION_EDIT = "transaction/edit/{transactionId}"
     const val CATEGORIES = "categories/{categoryType}"
 
-    fun transactionNew(type: TransactionType = TransactionType.EXPENSE) =
-        "transaction/new?type=${type.name}"
+    fun transactionNew(type: TransactionType = TransactionType.EXPENSE, voice: Boolean = false) =
+        "transaction/new?type=${type.name}&voice=$voice"
 
     fun transactionEdit(transactionId: String) = "transaction/edit/$transactionId"
 
@@ -195,6 +197,7 @@ fun AppNavHost(appSession: AppSession, pendingNavigation: PendingNavigation) {
                         currentRoute = currentRoute,
                         onSelect = selectPage,
                         onCreate = { navController.navigate(Routes.transactionNew()) },
+                        onVoice = { navController.navigate(Routes.transactionNew(voice = true)) },
                     )
                 }
             },
@@ -298,6 +301,10 @@ fun AppNavHost(appSession: AppSession, pendingNavigation: PendingNavigation) {
                             nullable = true
                             defaultValue = TransactionType.EXPENSE.name
                         },
+                        navArgument("voice") {
+                            type = NavType.BoolType
+                            defaultValue = false
+                        },
                     ),
                 ) {
                     TransactionEditorScreen(appSession = appSession, navController = navController)
@@ -319,6 +326,7 @@ private fun PagerNavigationBar(
     currentRoute: String?,
     onSelect: (TopLevelPage) -> Unit,
     onCreate: () -> Unit,
+    onVoice: () -> Unit,
 ) {
     val selectedPage = if (isFilteredTransactionRoute(currentRoute)) {
         TopLevelPage.Transactions
@@ -329,6 +337,7 @@ private fun PagerNavigationBar(
         selectedPage = selectedPage,
         onSelect = onSelect,
         onCreate = onCreate,
+        onVoice = onVoice,
     )
 }
 
@@ -380,11 +389,13 @@ private fun TopLevelPager(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun LedgerBottomBar(
     selectedPage: TopLevelPage,
     onSelect: (TopLevelPage) -> Unit,
     onCreate: () -> Unit,
+    onVoice: () -> Unit = {},
 ) {
     val haptic = rememberLedgerHaptic()
     val itemColors = NavigationBarItemDefaults.colors(
@@ -418,16 +429,24 @@ internal fun LedgerBottomBar(
                 colors = itemColors,
                 icon = {
                     Surface(
-                        onClick = {
-                            haptic()
-                            onCreate()
-                        },
-                        modifier = Modifier.size(48.dp),
+                        modifier = Modifier
+                            .size(48.dp)
+                            .combinedClickable(
+                                onClick = {
+                                    haptic()
+                                    onCreate()
+                                },
+                                onLongClick = {
+                                    haptic()
+                                    onVoice()
+                                },
+                                onLongClickLabel = "语音记账",
+                            ),
                         shape = CircleShape,
                         color = MaterialTheme.colorScheme.primary,
                         contentColor = MaterialTheme.colorScheme.onPrimary,
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Icon(Icons.Outlined.Add, contentDescription = "记一笔")
                         }
                     }

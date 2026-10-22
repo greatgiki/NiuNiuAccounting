@@ -2,6 +2,8 @@ package com.example.localledger.domain.importing
 
 import com.example.localledger.domain.model.TransactionType
 
+data class CategoryKeywordHit(val keyword: String, val categoryName: String)
+
 object CategoryKeywordMapper {
     private data class Rule(val keywords: List<String>, val categoryName: String)
 
@@ -23,11 +25,19 @@ object CategoryKeywordMapper {
         Rule(listOf("兼职", "稿费"), "兼职"),
     )
 
-    fun suggestName(type: TransactionType, text: String): String {
+    /** First matching merchant or bill keyword, or null when nothing in the rules hits. */
+    fun match(type: TransactionType, text: String): CategoryKeywordHit? {
         val haystack = text.lowercase()
-        if (type == TransactionType.INCOME && haystack.contains("退款")) return "退款"
+        if (type == TransactionType.INCOME && haystack.contains("退款")) {
+            return CategoryKeywordHit("退款", "退款")
+        }
         val rules = if (type == TransactionType.INCOME) incomeRules else expenseRules
-        return rules.firstOrNull { rule -> rule.keywords.any { haystack.contains(it.lowercase()) } }?.categoryName
-            ?: "其他"
+        for (rule in rules) {
+            val keyword = rule.keywords.firstOrNull { haystack.contains(it.lowercase()) } ?: continue
+            return CategoryKeywordHit(keyword, rule.categoryName)
+        }
+        return null
     }
+
+    fun suggestName(type: TransactionType, text: String): String = match(type, text)?.categoryName ?: "其他"
 }
