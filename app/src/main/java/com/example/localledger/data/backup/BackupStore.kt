@@ -21,6 +21,7 @@ internal object BackupStore {
                     exchangeRateSnapshots = dao.rateSnapshots().map { it.toRow() },
                     exchangeRateHistory = dao.rateHistory().map { it.toRow() },
                     pendingDrafts = dao.pendingDrafts().map { it.toRow() },
+                    merchantCategoryRules = dao.merchantCategoryRules().map { it.toRow() },
                 ),
             )
         }
@@ -37,6 +38,7 @@ internal object BackupStore {
         writeSafety(safety)
         database.withTransaction {
             val dao = database.backupDao()
+            dao.deleteMerchantRules()
             dao.deleteOccurrences()
             dao.deleteDrafts()
             dao.deleteRules()
@@ -64,6 +66,9 @@ internal object BackupStore {
                 dao.insertRateHistory(tables.exchangeRateHistory.map { it.toEntity() })
             }
             if (tables.pendingDrafts.isNotEmpty()) dao.insertDrafts(tables.pendingDrafts.map { it.toEntity() })
+            if (tables.merchantCategoryRules.isNotEmpty()) {
+                dao.insertMerchantRules(tables.merchantCategoryRules.map { it.toEntity() })
+            }
         }
     }
 }

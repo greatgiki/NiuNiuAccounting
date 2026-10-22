@@ -46,6 +46,18 @@ class BackupCodecTest {
     }
 
     @Test
+    fun formatVersionOneStillDecodesWithoutMerchantRules() {
+        val legacy = sampleDocument().copy(formatVersion = BackupCodec.MIN_FORMAT_VERSION)
+        val bytes = BackupCodec.encode(legacy, password = null, iterations = 1_000)
+        assertEquals(1, BackupCodec.header(bytes).formatVersion)
+        val decoded = BackupCodec.decode(bytes, password = null)
+        assertEquals(legacy, decoded)
+        assertTrue(decoded.tables.merchantCategoryRules.isEmpty())
+        assertEquals(null, decoded.tables.transactions.single().counterparty)
+        BackupValidator.validate(decoded)
+    }
+
+    @Test
     fun validatorRejectsOlderSchemaAndBrokenAccountReference() {
         val older = assertThrows(BackupFailure::class.java) {
             BackupValidator.validate(sampleDocument().copy(schemaVersion = WALLET_SCHEMA_VERSION - 1))

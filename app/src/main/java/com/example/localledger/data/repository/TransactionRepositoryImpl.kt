@@ -5,6 +5,7 @@ import com.example.localledger.data.local.database.WalletDatabaseSource
 import com.example.localledger.data.local.entity.TransactionEntity
 import com.example.localledger.data.mapper.toDomain
 import com.example.localledger.domain.error.LedgerException
+import com.example.localledger.domain.importing.MerchantMemoryPolicy
 import com.example.localledger.domain.importing.RecordOrigin
 import com.example.localledger.domain.model.CategoryType
 import com.example.localledger.domain.model.SaveTransactionCommand
@@ -29,6 +30,7 @@ class TransactionRepositoryImpl @Inject constructor(
     private val databaseProvider: WalletDatabaseSource,
     private val exchangeRates: ExchangeRateRepository,
     private val clock: Clock,
+    private val merchantCategories: MerchantCategoryBook,
 ) : TransactionRepository {
     override fun observeTransaction(transactionId: String): Flow<TransactionDetail?> = flow {
         emitAll(
@@ -111,6 +113,7 @@ class TransactionRepositoryImpl @Inject constructor(
 
             val id = existing?.id ?: requestedId ?: UUID.randomUUID().toString()
             val now = clock.millis()
+            val counterparty = resolveCounterparty(command, existing)
             database.transactionDao().upsert(
                 TransactionEntity(
                     id = id,
@@ -130,8 +133,30 @@ class TransactionRepositoryImpl @Inject constructor(
                     externalSource = command.externalSource ?: existing?.externalSource,
                     externalId = command.externalId ?: existing?.externalId,
                     origin = command.origin ?: existing?.origin ?: RecordOrigin.MANUAL,
+                    counterparty = counterparty,
                 ),
             )
+            val categoryChanged = if (existing == null) {
+                command.rememberMerchantCategory
+            } else {
+                existing.categoryId != command.categoryId
+            }
+            if (
+                MerchantMemoryPolicy.shouldRemember(
+                    type = command.type,
+                    merchant = counterparty,
+                    categoryId = command.categoryId,
+                    previousCategoryId = existing?.categoryId,
+                    categoryChanged = categoryChanged,
+                )
+            ) {
+                merchantCategories.remember(
+                    ledgerId = command.ledgerId,
+                    type = command.type,
+                    merchant = counterparty.orEmpty(),
+                    categoryId = command.categoryId!!,
+                )
+            }
             id
         }
     }
@@ -148,6 +173,12 @@ class TransactionRepositoryImpl @Inject constructor(
                 throw LedgerException.TransactionNotFound()
             }
         }
+    }
+
+    private fun resolveCounterparty(command: SaveTransactionCommand, existing: TransactionEntity?): String? {
+        if (command.type == TransactionType.TRANSFER) return null
+        if (command.counterparty == null) return existing?.counterparty
+        return command.counterparty.trim().ifEmpty { null }
     }
 
     private fun validateShape(command: SaveTransactionCommand) {

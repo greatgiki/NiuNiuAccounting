@@ -10,7 +10,7 @@ import com.example.localledger.domain.importing.BillSource
 import com.example.localledger.domain.importing.CandidateKind
 import com.example.localledger.domain.importing.CaptureGate
 import com.example.localledger.domain.importing.CaptureSettings
-import com.example.localledger.domain.importing.CategoryKeywordMapper
+import com.example.localledger.domain.importing.CategoryGuess
 import com.example.localledger.domain.importing.DedupDecision
 import com.example.localledger.domain.importing.DedupExisting
 import com.example.localledger.domain.importing.DedupIncoming
@@ -92,6 +92,7 @@ class PaymentDraftWriter @Inject constructor(
     private val draftRepository: DraftRepository,
     private val accountRepository: AccountRepository,
     private val categoryRepository: CategoryRepository,
+    private val merchantCategories: MerchantCategoryBook,
     private val clock: Clock,
 ) {
     private val recordMutex = Mutex()
@@ -192,9 +193,8 @@ class PaymentDraftWriter @Inject constructor(
         val categoryType = if (parsed.type == TransactionType.INCOME) CategoryType.INCOME else CategoryType.EXPENSE
         val categories = categoryRepository.observeCategories(ledgerId, categoryType).first()
         val accounts = accountRepository.observeAccounts(ledgerId).first()
-        val categoryName = CategoryKeywordMapper.suggestName(parsed.type, parsed.counterparty)
-        val categoryId = categories.firstOrNull { !it.isArchived && it.name == categoryName }?.id
-            ?: categories.firstOrNull { !it.isArchived && it.name == "其他" }?.id
+        val remembered = merchantCategories.findCategoryId(ledgerId, parsed.type, parsed.counterparty)
+        val categoryId = CategoryGuess.idFor(parsed.type, parsed.counterparty, categories, remembered)
         val accountId = AccountHintMapper.suggest(
             paymentMethod = "",
             source = parsed.source,
