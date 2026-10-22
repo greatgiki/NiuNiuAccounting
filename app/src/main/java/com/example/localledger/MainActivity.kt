@@ -130,7 +130,11 @@ fun LocalLedgerApp(
                     session.showDataLossNotice -> DataLossNoticeScreen(
                         onAcknowledge = { scope.launch { appSession.acknowledgeDataLoss() } },
                     )
-                    else -> AppNavHost(appSession = appSession, pendingNavigation = pendingNavigation)
+                    else -> AppNavHost(
+                        appSession = appSession,
+                        pendingNavigation = pendingNavigation,
+                        appLock = appLock,
+                    )
                 }
             }
         }

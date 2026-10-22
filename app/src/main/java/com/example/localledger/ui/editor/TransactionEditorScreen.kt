@@ -25,6 +25,7 @@ import androidx.compose.material.icons.automirrored.outlined.Backspace
 import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePicker
@@ -85,6 +86,7 @@ import com.example.localledger.ui.component.ConfirmDeleteDialog
 import com.example.localledger.ui.component.SubmitGate
 import com.example.localledger.ui.theme.LocalLedgerTheme
 import com.example.localledger.ui.theme.amountColor
+import com.example.localledger.ui.voice.VoiceBookkeeping
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneId
@@ -99,8 +101,13 @@ fun TransactionEditorScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var voiceActive by remember { mutableStateOf(false) }
     val deleteGate = remember { SubmitGate() }
     val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        if (!state.isEdit && viewModel.takeVoiceLaunch()) voiceActive = true
+    }
 
     LaunchedEffect(Unit) {
         viewModel.effects.collect { effect ->
@@ -142,6 +149,7 @@ fun TransactionEditorScreen(
                 else -> EditorContent(
                     state = state,
                     viewModel = viewModel,
+                    onVoice = { voiceActive = true },
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -181,6 +189,14 @@ fun TransactionEditorScreen(
             },
         )
     }
+
+    if (voiceActive && !state.isEdit) {
+        VoiceBookkeeping(
+            viewModel = viewModel,
+            defaultAccountId = state.input.accountId,
+            onDismiss = { voiceActive = false },
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -188,6 +204,7 @@ fun TransactionEditorScreen(
 private fun EditorContent(
     state: EditorUiState,
     viewModel: TransactionEditorViewModel,
+    onVoice: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val input = state.input
@@ -231,13 +248,25 @@ private fun EditorContent(
 
         val sourceCurrency = state.allAccounts.firstOrNull { it.id == input.accountId }?.currencyCode ?: "CNY"
         val sourceSymbol = CurrencyCatalog.symbol(sourceCurrency)
-        Text(
-            text = if (input.amountText.isEmpty()) "${sourceSymbol}0" else "$sourceSymbol${input.amountText}",
-            style = MaterialTheme.typography.displayMedium.copy(fontFeatureSettings = "tnum"),
-            color = if (input.amountError != null) MaterialTheme.colorScheme.error else typeColor,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-        )
+        Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+            Text(
+                text = if (input.amountText.isEmpty()) "${sourceSymbol}0" else "$sourceSymbol${input.amountText}",
+                style = MaterialTheme.typography.displayMedium.copy(fontFeatureSettings = "tnum"),
+                color = if (input.amountError != null) MaterialTheme.colorScheme.error else typeColor,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.align(Alignment.Center).padding(horizontal = 48.dp),
+            )
+            if (!state.isEdit) {
+                IconButton(
+                    onClick = onVoice,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .semantics { contentDescription = "语音记账" },
+                ) {
+                    Icon(Icons.Outlined.Mic, contentDescription = "语音记账")
+                }
+            }
+        }
         if (input.amountError != null) {
             Text(
                 input.amountError,
