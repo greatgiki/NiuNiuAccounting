@@ -5,12 +5,20 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.localledger.core.money.MoneyParser
+import com.example.localledger.data.repository.MerchantCategoryBook
 import com.example.localledger.domain.error.LedgerException
 import com.example.localledger.domain.importing.MerchantMemoryPolicy
 import com.example.localledger.domain.model.Account
 import com.example.localledger.domain.model.Category
+import com.example.localledger.domain.model.CategoryType
 import com.example.localledger.domain.model.SaveTransactionCommand
 import com.example.localledger.domain.model.TransactionType
+import com.example.localledger.domain.voice.VoiceAccountRef
+import com.example.localledger.domain.voice.VoiceCategoryRef
+import com.example.localledger.domain.voice.VoiceLedgerDraft
+import com.example.localledger.domain.voice.VoiceLedgerParser
+import com.example.localledger.domain.voice.VoiceMerchantOverride
+import com.example.localledger.ui.voice.VoiceDraftSave
 import com.example.localledger.domain.money.CurrencyCatalog
 import com.example.localledger.domain.repository.TransactionRepository
 import com.example.localledger.domain.time.DateRangeResolver
@@ -38,11 +46,14 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
 sealed interface EditorEffect {
@@ -95,11 +106,17 @@ class TransactionEditorViewModel @Inject constructor(
     private val saveIncomeExpenseUseCase: SaveIncomeExpenseUseCase,
     private val saveTransferUseCase: SaveTransferUseCase,
     private val deleteTransactionUseCase: DeleteTransactionUseCase,
+    private val merchantCategoryBook: MerchantCategoryBook,
     dateRangeResolver: DateRangeResolver,
 ) : ViewModel() {
-    private val transactionId: String? = savedStateHandle["transactionId"]
-    private val zoneId: ZoneId = dateRangeResolver.zoneId()
-    private val initialType: TransactionType = savedStateHandle.get<String>("type")
+    private val savedState: SavedStateHandle = savedStateHandle
+    private val transactionId: String? = savedState["transactionId"]
+    internal val zoneId: ZoneId = dateRangeResolver.zoneId()
+    internal val voiceExpenseCategories = catalog.expenseCategories
+    internal val voiceIncomeCategories = catalog.incomeCategories
+    internal val voiceAccounts = catalog.accounts
+    private val voiceSaveGate = AtomicBoolean(false)
+    private val initialType: TransactionType = savedState.get<String>("type")
         ?.let { runCatching { TransactionType.valueOf(it) }.getOrNull() }
         ?: TransactionType.EXPENSE
 
@@ -287,6 +304,101 @@ class TransactionEditorViewModel @Inject constructor(
         }
     }
 
+    fun takeVoiceLaunch(): Boolean {
+        if (transactionId != null) return false
+        if (savedState.get<Boolean>(VOICE_LAUNCH_CONSUMED) == true) return false
+        val requested = when (val raw = savedState.get<Any>("voice")) {
+            is Boolean -> raw
+            is String -> raw.equals("true", ignoreCase = true)
+            else -> false
+        }
+        if (!requested) return false
+        savedState[VOICE_LAUNCH_CONSUMED] = true
+        return true
+    }
+
+    suspend fun parseVoice(text: String): List<VoiceLedgerDraft> = withContext(Dispatchers.IO) {
+        val categories = (voiceExpenseCategories.value.active + voiceIncomeCategories.value.active)
+            .map { VoiceCategoryRef(it.id, it.name, it.type) }
+        val accounts = voiceAccounts.value.active.map { VoiceAccountRef(it.id, it.name, it.type) }
+        val ledgerId = appSession.state.value.currentLedgerId
+        val overrides = if (ledgerId.isNullOrBlank()) {
+            emptyList()
+        } else {
+            merchantOverrides(ledgerId, TransactionType.EXPENSE) +
+                merchantOverrides(ledgerId, TransactionType.INCOME)
+        }
+        VoiceLedgerParser.parse(text, categories, accounts, LocalDate.now(zoneId), overrides)
+    }
+
+    private suspend fun merchantOverrides(ledgerId: String, type: TransactionType): List<VoiceMerchantOverride> {
+        return merchantCategoryBook.keys(ledgerId, type).map { (key, categoryId) ->
+            VoiceMerchantOverride(merchantKey = key, categoryId = categoryId, type = type)
+        }
+    }
+
+    suspend fun saveVoiceDrafts(drafts: List<VoiceDraftSave>): UiOutcome {
+        if (!voiceSaveGate.compareAndSet(false, true)) return UiOutcome.Failure("正在保存")
+        try {
+            val ledgerId = appSession.state.value.currentLedgerId
+                ?: return UiOutcome.Failure("请先选择账本")
+            if (drafts.isEmpty()) return UiOutcome.Failure("没有可记的内容")
+            val prepared = try {
+                drafts.map { toVoiceCommand(ledgerId, it) }
+            } catch (error: LedgerException) {
+                return UiOutcome.Failure(error.message ?: "保存失败")
+            }
+            return try {
+                prepared.forEach { command -> saveIncomeExpenseUseCase(command) }
+                drafts.last().accountId.let { appSession.recordLastAccount(ledgerId, it) }
+                effectChannel.send(EditorEffect.NavigateBack)
+                UiOutcome.Success
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: LedgerException) {
+                UiOutcome.Failure(error.message ?: "保存失败")
+            } catch (error: Exception) {
+                UiOutcome.Failure(error.message ?: "保存失败")
+            }
+        } finally {
+            voiceSaveGate.set(false)
+        }
+    }
+
+    private fun toVoiceCommand(ledgerId: String, draft: VoiceDraftSave): SaveTransactionCommand {
+        if (draft.type == TransactionType.TRANSFER) throw LedgerException.InvalidTransactionType()
+        val amount = MoneyParser.toMinor(draft.amountText, scaleOf(draft.accountId))
+        val categories = voiceExpenseCategories.value.all + voiceIncomeCategories.value.all
+        val category = categories.firstOrNull { it.id == draft.categoryId } ?: throw LedgerException.CategoryNotFound()
+        val expected = if (draft.type == TransactionType.INCOME) CategoryType.INCOME else CategoryType.EXPENSE
+        if (category.type != expected) throw LedgerException.CategoryTypeMismatch()
+        val account = voiceAccounts.value.all.firstOrNull { it.id == draft.accountId }
+            ?: throw LedgerException.AccountNotFound()
+        if (account.isArchived) throw LedgerException.AccountArchived()
+        return SaveTransactionCommand(
+            ledgerId = ledgerId,
+            type = draft.type,
+            amountMinor = amount,
+            accountId = draft.accountId,
+            categoryId = draft.categoryId,
+            transactionAt = draft.date.atTime(draft.time).atZone(zoneId).toInstant().toEpochMilli(),
+            note = draft.note.trim().ifBlank { null },
+            counterparty = draft.merchant?.trim()?.take(40)?.ifBlank { null },
+            rememberMerchantCategory = MerchantMemoryPolicy.shouldRemember(
+                type = draft.type,
+                merchant = draft.merchant,
+                categoryId = draft.categoryId,
+                previousCategoryId = draft.baselineCategoryId,
+                categoryChanged = draft.categoryId != draft.baselineCategoryId,
+            ),
+        )
+    }
+
+    private fun scaleOf(accountId: String): Int {
+        val code = voiceAccounts.value.all.firstOrNull { it.id == accountId }?.currencyCode ?: "CNY"
+        return CurrencyCatalog.of(code).minorDigits
+    }
+
     fun save() {
         val state = uiState.value
         val input = state.input
@@ -409,6 +521,10 @@ class TransactionEditorViewModel @Inject constructor(
     private fun selectedScale(accountId: String?): Int {
         val code = uiState.value.allAccounts.firstOrNull { it.id == accountId }?.currencyCode ?: "CNY"
         return CurrencyCatalog.of(code).minorDigits
+    }
+
+    private companion object {
+        const val VOICE_LAUNCH_CONSUMED = "voiceLaunchConsumed"
     }
 }
 
