@@ -3,9 +3,11 @@ package com.example.localledger.domain.time
 import com.example.localledger.domain.error.LedgerException
 import com.example.localledger.domain.model.DateTimeRange
 import com.example.localledger.domain.model.StatisticsPeriod
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
+import java.time.temporal.TemporalAdjusters
 import javax.inject.Inject
 
 fun interface ZoneIdProvider {
@@ -21,6 +23,10 @@ class DateRangeResolver @Inject constructor(
 ) {
     fun resolve(period: StatisticsPeriod): DateTimeRange = when (period) {
         is StatisticsPeriod.Day -> range(period.date, period.date.plusDays(1))
+        is StatisticsPeriod.Week -> {
+            val start = period.weekStart.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+            range(start, start.plusWeeks(1))
+        }
         is StatisticsPeriod.Month -> range(
             period.yearMonth.atDay(1),
             period.yearMonth.plusMonths(1).atDay(1),

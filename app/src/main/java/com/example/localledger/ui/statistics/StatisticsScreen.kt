@@ -64,6 +64,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import com.example.localledger.domain.model.StatisticsPeriod
 import com.example.localledger.domain.model.TransactionType
+import com.example.localledger.domain.time.inclusiveDates
 import com.example.localledger.ui.AppSession
 import com.example.localledger.domain.money.RatioMath
 import com.example.localledger.ui.common.CategoryIcons
@@ -115,6 +116,15 @@ fun StatisticsScreen(
                     onDismiss = { showPeriodMenu = false },
                     onPicker = { picker = it },
                 )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                val anchor = state.period.inclusiveDates().first
+                TextButton(onClick = { navController.navigate(Routes.weekReport(anchor)) }) {
+                    Text("周报")
+                }
+                TextButton(onClick = { navController.navigate(Routes.monthReport(anchor)) }) {
+                    Text("月报")
+                }
             }
 
             com.example.localledger.ui.component.LedgerCard(modifier = Modifier.fillMaxWidth()) {
@@ -249,24 +259,14 @@ fun StatisticsScreen(
     }
 }
 
-private fun periodDates(period: StatisticsPeriod): Pair<LocalDate, LocalDate> = when (period) {
-    is StatisticsPeriod.Day -> period.date to period.date
-    is StatisticsPeriod.Month -> period.yearMonth.atDay(1) to period.yearMonth.atEndOfMonth()
-    is StatisticsPeriod.Year -> LocalDate.of(period.year, 1, 1) to LocalDate.of(period.year, 12, 31)
-    is StatisticsPeriod.Custom -> period.startDate to period.endDate
-}
+private fun periodDates(period: StatisticsPeriod): Pair<LocalDate, LocalDate> = period.inclusiveDates()
 
 private fun navigateToRangeDetail(
     navController: NavHostController,
     period: StatisticsPeriod,
     categoryId: String,
 ) {
-    val (start, end) = when (period) {
-        is StatisticsPeriod.Day -> period.date to period.date
-        is StatisticsPeriod.Month -> period.yearMonth.atDay(1) to period.yearMonth.atEndOfMonth()
-        is StatisticsPeriod.Year -> LocalDate.of(period.year, 1, 1) to LocalDate.of(period.year, 12, 31)
-        is StatisticsPeriod.Custom -> period.startDate to period.endDate
-    }
+    val (start, end) = period.inclusiveDates()
     navController.navigateToTransactions(
         type = TransactionType.EXPENSE,
         categoryId = categoryId,
@@ -286,6 +286,13 @@ private fun PeriodMenu(
             text = { Text("指定日期") },
             onClick = {
                 onPicker(PeriodPicker.DAY)
+                onDismiss()
+            },
+        )
+        DropdownMenuItem(
+            text = { Text("指定周") },
+            onClick = {
+                onPicker(PeriodPicker.WEEK)
                 onDismiss()
             },
         )
@@ -313,7 +320,7 @@ private fun PeriodMenu(
     }
 }
 
-private enum class PeriodPicker { DAY, MONTH, YEAR, CUSTOM }
+private enum class PeriodPicker { DAY, WEEK, MONTH, YEAR, CUSTOM }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -325,7 +332,9 @@ private fun PeriodPickerDialog(
 ) {
     var start by remember { mutableStateOf((current as? StatisticsPeriod.Custom)?.startDate) }
     var end by remember { mutableStateOf((current as? StatisticsPeriod.Custom)?.endDate) }
-    var showStart by remember { mutableStateOf(picker == PeriodPicker.DAY || picker == PeriodPicker.CUSTOM) }
+    var showStart by remember {
+        mutableStateOf(picker == PeriodPicker.DAY || picker == PeriodPicker.WEEK || picker == PeriodPicker.CUSTOM)
+    }
     var showEnd by remember { mutableStateOf(false) }
     var rangeError by remember { mutableStateOf(false) }
     var yearText by remember {
@@ -343,7 +352,11 @@ private fun PeriodPickerDialog(
 
     if (showStart || showEnd) {
         val isStart = showStart
-        val initial = (if (isStart) start else end) ?: LocalDate.now()
+        val initial = (if (isStart) start else end) ?: when {
+            picker == PeriodPicker.WEEK && current is StatisticsPeriod.Week -> current.weekStart
+            picker == PeriodPicker.DAY && current is StatisticsPeriod.Day -> current.date
+            else -> LocalDate.now()
+        }
         key(isStart, initial) {
             val dateState = rememberDatePickerState(initialSelectedDateMillis = initial.atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli())
             DatePickerDialog(
@@ -352,8 +365,16 @@ private fun PeriodPickerDialog(
                 TextButton(onClick = {
                     val date = dateState.selectedDateMillis?.let { Instant.ofEpochMilli(it).atZone(ZoneId.of("UTC")).toLocalDate() }
                     if (isStart) {
-                        if (picker == PeriodPicker.DAY) onSelect(StatisticsPeriod.Day(date ?: initial))
-                        else { start = date; showStart = false; showEnd = true }
+                        val picked = date ?: initial
+                        when (picker) {
+                            PeriodPicker.DAY -> onSelect(StatisticsPeriod.Day(picked))
+                            PeriodPicker.WEEK -> onSelect(StatisticsPeriod.Week.containing(picked))
+                            else -> {
+                                start = date
+                                showStart = false
+                                showEnd = true
+                            }
+                        }
                     } else {
                         if (date != null && start != null && date.isBefore(start)) {
                             rangeError = true
