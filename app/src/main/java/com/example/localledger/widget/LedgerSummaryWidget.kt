@@ -6,18 +6,24 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.glance.ColorFilter
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
+import androidx.glance.Image
+import androidx.glance.ImageProvider
 import androidx.glance.LocalContext
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.action.actionStartActivity
+import androidx.glance.appwidget.appWidgetBackground
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
 import androidx.glance.background
 import androidx.glance.layout.Alignment
+import androidx.glance.layout.Box
 import androidx.glance.layout.Column
+import androidx.glance.layout.ContentScale
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxSize
@@ -31,6 +37,7 @@ import androidx.glance.color.ColorProvider
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider as GlanceColor
 import com.example.localledger.MainActivity
+import com.example.localledger.R
 import com.example.localledger.domain.model.IncomeExpenseSummary
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -60,36 +67,52 @@ private fun dayNight(day: Color, night: Color): GlanceColor = ColorProvider(day,
 @Composable
 private fun LedgerWidgetBody(snapshot: WidgetSnapshot) {
     val context = LocalContext.current
-    Column(
+    // The shape drawable rounds the surface on every API. cornerRadius clips
+    // children, but Glance ignores it before API 31, so the drawable is what
+    // HyperOS and older hosts actually draw.
+    Box(
         modifier = GlanceModifier
             .fillMaxSize()
-            .background(Surface)
-            .padding(12.dp),
-        verticalAlignment = Alignment.Vertical.CenterVertically,
+            .appWidgetBackground()
+            .cornerRadius(R.dimen.widget_background_radius),
     ) {
-        Row(
-            modifier = GlanceModifier.fillMaxWidth(),
+        Image(
+            provider = ImageProvider(R.drawable.widget_background),
+            contentDescription = null,
+            modifier = GlanceModifier.fillMaxSize(),
+            contentScale = ContentScale.FillBounds,
+            colorFilter = ColorFilter.tint(Surface),
+        )
+        Column(
+            modifier = GlanceModifier
+                .fillMaxSize()
+                .padding(12.dp),
             verticalAlignment = Alignment.Vertical.CenterVertically,
         ) {
-            Text(
-                text = "牛牛记账",
-                style = TextStyle(color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Medium),
-                modifier = GlanceModifier.defaultWeight(),
-            )
-            Text(
-                text = "记一笔",
-                style = TextStyle(color = OnGold, fontSize = 13.sp, fontWeight = FontWeight.Medium),
-                modifier = GlanceModifier
-                    .background(Gold)
-                    .cornerRadius(14.dp)
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
-                    .clickable(actionStartActivity(addIntent(context))),
-            )
+            Row(
+                modifier = GlanceModifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Vertical.CenterVertically,
+            ) {
+                Text(
+                    text = "牛牛记账",
+                    style = TextStyle(color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Medium),
+                    modifier = GlanceModifier.defaultWeight(),
+                )
+                Text(
+                    text = "记一笔",
+                    style = TextStyle(color = OnGold, fontSize = 13.sp, fontWeight = FontWeight.Medium),
+                    modifier = GlanceModifier
+                        .background(Gold)
+                        .cornerRadius(14.dp)
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                        .clickable(actionStartActivity(addIntent(context))),
+                )
+            }
+            Spacer(GlanceModifier.height(8.dp))
+            PeriodRow("今日", snapshot.today, snapshot)
+            Spacer(GlanceModifier.height(4.dp))
+            PeriodRow("本月", snapshot.month, snapshot)
         }
-        Spacer(GlanceModifier.height(8.dp))
-        PeriodRow("今日", snapshot.today, snapshot)
-        Spacer(GlanceModifier.height(4.dp))
-        PeriodRow("本月", snapshot.month, snapshot)
     }
 }
 

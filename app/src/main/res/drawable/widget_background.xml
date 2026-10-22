@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The rounded surface is in the drawable so corners stay rounded where
+  GlanceModifier.cornerRadius is a no-op (before API 31) and on launchers
+  that do not clip to the view outline. Outside the radius the shape is
+  transparent.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/widget_surface" />
+    <corners android:radius="@dimen/widget_background_radius" />
+</shape>
