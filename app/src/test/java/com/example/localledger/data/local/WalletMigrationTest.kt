@@ -263,10 +263,65 @@ class WalletMigrationTest {
         migrated.close()
     }
 
+    @Test
+    fun migrate5To6AddsCounterpartyAndMerchantRules() {
+        helper.createDatabase(MEMORY_DB, 5).apply {
+            execSQL(
+                """
+                INSERT INTO ledgers (id, name, currency_code, created_at, is_archived)
+                VALUES ('ledger', '日常', 'CNY', 1, 0)
+                """.trimIndent(),
+            )
+            execSQL(
+                """
+                INSERT INTO accounts (id, ledger_id, name, type, initial_balance_minor, sort_order, is_archived, created_at, updated_at, currency_code)
+                VALUES ('cash', 'ledger', '现金', 'CASH', 0, 0, 0, 1, 1, 'CNY')
+                """.trimIndent(),
+            )
+            execSQL(
+                """
+                INSERT INTO categories (id, ledger_id, name, type, icon_key, sort_order, is_archived, created_at, updated_at)
+                VALUES ('food', 'ledger', '餐饮', 'EXPENSE', 'restaurant', 0, 0, 1, 1)
+                """.trimIndent(),
+            )
+            execSQL(
+                """
+                INSERT INTO transactions (
+                  id, ledger_id, type, amount_minor, account_id, to_account_id, category_id,
+                  transaction_at, note, created_at, updated_at, to_amount_minor, base_amount_minor, fx_rate,
+                  external_source, external_id, origin
+                ) VALUES (
+                  'expense', 'ledger', 'EXPENSE', 2500, 'cash', NULL, 'food',
+                  10, NULL, 10, 10, NULL, 2500, '1', NULL, NULL, 'MANUAL'
+                )
+                """.trimIndent(),
+            )
+            close()
+        }
+        val migrated = helper.runMigrationsAndValidate(MEMORY_DB, 6, true, *WalletDatabase.MIGRATIONS)
+        migrated.query("SELECT counterparty FROM transactions WHERE id = 'expense'").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertTrue(cursor.isNull(0))
+        }
+        migrated.execSQL(
+            """
+            INSERT INTO merchant_category_rules (
+              id, ledger_id, merchant_key, merchant_label, type, category_id, updated_at
+            ) VALUES ('rule', 'ledger', '美团', '美团', 'EXPENSE', 'food', 30)
+            """.trimIndent(),
+        )
+        migrated.query("SELECT category_id FROM merchant_category_rules WHERE merchant_key = '美团'").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("food", cursor.getString(0))
+        }
+        migrated.close()
+    }
+
     private companion object {
         const val TEST_DB = "migration-test"
         const val HISTORY_DB = "migration-history"
         const val IMPORT_DB = "migration-import"
         const val DRAFT_DB = "migration-draft"
+        const val MEMORY_DB = "migration-merchant"
     }
 }

@@ -58,7 +58,7 @@ class LedgerWriteRulesTest {
         val ledgers = LedgerRepositoryImpl(source, clock)
         accounts = AccountRepositoryImpl(source, clock)
         categories = CategoryRepositoryImpl(source, clock)
-        transactions = TransactionRepositoryImpl(source, UnusedExchangeRates, clock)
+        transactions = TransactionRepositoryImpl(source, UnusedExchangeRates, clock, com.example.localledger.data.repository.MerchantCategoryBook(source, clock))
         saveIncomeExpense = SaveIncomeExpenseUseCase(transactions)
         saveTransfer = SaveTransferUseCase(transactions)
         deleteTransaction = DeleteTransactionUseCase(transactions)

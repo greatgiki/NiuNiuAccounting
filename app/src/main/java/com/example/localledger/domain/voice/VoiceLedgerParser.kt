@@ -1,6 +1,7 @@
 package com.example.localledger.domain.voice
 
 import com.example.localledger.domain.importing.CategoryKeywordMapper
+import com.example.localledger.domain.importing.MerchantKey
 import com.example.localledger.domain.model.AccountType
 import com.example.localledger.domain.model.CategoryType
 import com.example.localledger.domain.model.TransactionType
@@ -9,6 +10,7 @@ import java.time.DateTimeException
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.temporal.TemporalAdjusters
+import java.util.Locale
 
 data class VoiceCategoryRef(
     val id: String,
@@ -32,12 +34,26 @@ data class VoiceLedgerDraft(
     val date: LocalDate,
     val note: String,
     val sourceText: String,
+    /** Spoken merchant whose user override matched, when one did. */
+    val merchant: String? = null,
+)
+
+/**
+ * A row from merchant_category_rules. [merchantKey] is [MerchantKey.normalize]'d.
+ * An override whose category is missing or archived is ignored.
+ */
+data class VoiceMerchantOverride(
+    val merchantKey: String,
+    val categoryId: String,
+    val type: TransactionType,
 )
 
 /**
  * Rule-based parser for spoken bookkeeping. No network and no model:
- * amounts, income words, relative dates, the user's categories, and account names.
+ * amounts, income words, relative dates, the user's categories, account names,
+ * and merchant_category_rules overrides.
  * Several items in one utterance are split on 和 / 还有 / ，.
+ * A user override beats a keyword of the same length. A category name of that length, or longer, still wins.
  */
 object VoiceLedgerParser {
     private val incomeWords = listOf("收入", "工资", "报销", "退款", "红包")
@@ -95,13 +111,15 @@ object VoiceLedgerParser {
         categories: List<VoiceCategoryRef>,
         accounts: List<VoiceAccountRef>,
         today: LocalDate,
+        merchantOverrides: List<VoiceMerchantOverride> = emptyList(),
     ): List<VoiceLedgerDraft> {
         val text = normalizeUtterance(utterance)
         if (text.isEmpty()) return emptyList()
-        val pieces = splitParts(text, categories).map { parsePiece(it, categories, accounts, today) }
+        val pieces = splitParts(text, categories, merchantOverrides)
+            .map { parsePiece(it, categories, accounts, today, merchantOverrides) }
         val items = pieces.filter { it.item }
         if (items.isEmpty()) {
-            val only = parsePiece(text, categories, accounts, today)
+            val only = parsePiece(text, categories, accounts, today, merchantOverrides)
             return listOf(only.toDraft(date = only.date ?: today, account = only.account, notePrefix = ""))
         }
         val distinctDates = pieces.mapNotNull { it.date }.distinct()
@@ -131,6 +149,7 @@ object VoiceLedgerParser {
         val date: LocalDate?,
         val note: String,
         val source: String,
+        val merchant: String?,
     )
 
     private fun Piece.toDraft(
@@ -150,6 +169,7 @@ object VoiceLedgerParser {
             date = date,
             note = note,
             sourceText = source,
+            merchant = merchant,
         )
     }
 
@@ -158,22 +178,25 @@ object VoiceLedgerParser {
         categories: List<VoiceCategoryRef>,
         accounts: List<VoiceAccountRef>,
         today: LocalDate,
+        merchantOverrides: List<VoiceMerchantOverride>,
     ): Piece {
-        val type = detectType(source, categories)
+        val type = detectType(source, categories, merchantOverrides)
         val dateHit = findDate(source, today)
         var working = blank(source, dateHit?.range)
         val amountHit = ChineseAmounts.find(working)
         if (amountHit != null) working = blank(working, amountHit.start until amountHit.endExclusive)
         val accountHit = findAccount(working, accounts)
         if (accountHit != null) working = blank(working, accountHit.range)
-        val category = resolveCategory(working, type, categories)
+        val category = resolveCategory(working, type, categories, merchantOverrides)
         category?.keywords?.forEach { keyword ->
             rangesOf(working, keyword).forEach { working = blank(working, it) }
         }
         working = working.replace("收入", " ").replace("支出", " ")
         val note = cleanupNote(working)
         val categoryRef = category?.category
-        val spokenSignal = hasExpenseSignal(source) || hasIncomeSignal(source) || category != null
+        val spokenSignal = hasExpenseSignal(source, categories, merchantOverrides) ||
+            hasIncomeSignal(source, categories, merchantOverrides) ||
+            category != null
         return Piece(
             item = amountHit != null || spokenSignal,
             type = type,
@@ -184,66 +207,98 @@ object VoiceLedgerParser {
             date = dateHit?.date,
             note = note,
             source = source,
+            merchant = category?.merchant,
         )
     }
 
-    private fun splitParts(text: String, categories: List<VoiceCategoryRef>): List<String> {
+    private fun splitParts(
+        text: String,
+        categories: List<VoiceCategoryRef>,
+        merchantOverrides: List<VoiceMerchantOverride>,
+    ): List<String> {
         return strongSeparator.split(text)
             .map { it.trim() }
             .filter { it.isNotEmpty() }
-            .flatMap { splitHe(it, categories) }
+            .flatMap { splitHe(it, categories, merchantOverrides) }
     }
 
-    private fun splitHe(text: String, categories: List<VoiceCategoryRef>): List<String> {
+    private fun splitHe(
+        text: String,
+        categories: List<VoiceCategoryRef>,
+        merchantOverrides: List<VoiceMerchantOverride>,
+    ): List<String> {
         if (!text.contains('和')) return listOf(text)
         val pieces = text.split('和').map { it.trim() }.filter { it.isNotEmpty() }
-        if (pieces.size > 1 && pieces.all { looksLikeItem(it, categories) }) return pieces
+        if (pieces.size > 1 && pieces.all { looksLikeItem(it, categories, merchantOverrides) }) return pieces
         return listOf(text)
     }
 
-    private fun looksLikeItem(text: String, categories: List<VoiceCategoryRef>): Boolean {
+    private fun looksLikeItem(
+        text: String,
+        categories: List<VoiceCategoryRef>,
+        merchantOverrides: List<VoiceMerchantOverride>,
+    ): Boolean {
         if (ChineseAmounts.find(text) != null) return true
-        if (hasIncomeSignal(text) || hasExpenseSignal(text)) return true
+        if (hasIncomeSignal(text, categories, merchantOverrides) || hasExpenseSignal(text, categories, merchantOverrides)) return true
         return categories.any { it.name.length >= 2 && it.name != "其他" && text.contains(it.name) }
     }
 
-    private fun detectType(text: String, categories: List<VoiceCategoryRef>): TransactionType {
+    private fun detectType(
+        text: String,
+        categories: List<VoiceCategoryRef>,
+        merchantOverrides: List<VoiceMerchantOverride>,
+    ): TransactionType {
         val masked = expenseHongbao.replace(text, "")
         if (incomeWords.any { masked.contains(it) }) return TransactionType.INCOME
-        val expense = keywordScore(text, TransactionType.EXPENSE, categories)
-        val income = keywordScore(text, TransactionType.INCOME, categories)
+        val expense = keywordScore(text, TransactionType.EXPENSE, categories, merchantOverrides)
+        val income = keywordScore(text, TransactionType.INCOME, categories, merchantOverrides)
         return if (income > expense && income > 0) TransactionType.INCOME else TransactionType.EXPENSE
     }
 
-    private fun keywordScore(text: String, type: TransactionType, categories: List<VoiceCategoryRef>): Int {
+    private fun keywordScore(
+        text: String,
+        type: TransactionType,
+        categories: List<VoiceCategoryRef>,
+        merchantOverrides: List<VoiceMerchantOverride>,
+    ): Int {
         val categoryType = if (type == TransactionType.INCOME) CategoryType.INCOME else CategoryType.EXPENSE
         val name = categories
             .filter { it.type == categoryType && it.name.length >= 2 && it.name != "其他" && text.contains(it.name) }
             .maxOfOrNull { it.name.length } ?: 0
         val spoken = spokenWords(type).filter { text.contains(it) }.maxOfOrNull { it.length } ?: 0
         val mapped = CategoryKeywordMapper.match(type, text)?.keyword?.length ?: 0
-        return maxOf(name, spoken, mapped)
+        val remembered = matchingOverrides(text, type, categories, merchantOverrides)
+            .maxOfOrNull { it.second.last - it.second.first + 1 } ?: 0
+        return maxOf(name, spoken, mapped, remembered)
     }
 
     private data class CategoryResolution(
         val category: VoiceCategoryRef?,
         val targetName: String,
         val keywords: List<String>,
+        val merchant: String?,
     )
 
-    private data class Candidate(val length: Int, val priority: Int, val keyword: String, val targetName: String)
+    private data class Candidate(
+        val length: Int,
+        val priority: Int,
+        val keyword: String,
+        val targetName: String,
+        val merchant: String? = null,
+    )
 
     private fun resolveCategory(
         text: String,
         type: TransactionType,
         categories: List<VoiceCategoryRef>,
+        merchantOverrides: List<VoiceMerchantOverride>,
     ): CategoryResolution? {
         val categoryType = if (type == TransactionType.INCOME) CategoryType.INCOME else CategoryType.EXPENSE
         val pool = categories.filter { it.type == categoryType && it.name.isNotBlank() }
         val hits = ArrayList<Candidate>()
         for (category in pool) {
             if (category.name.length >= 2 && category.name != "其他" && text.contains(category.name)) {
-                hits += Candidate(category.name.length, priority = 2, category.name, category.name)
+                hits += Candidate(category.name.length, priority = 3, category.name, category.name)
             }
         }
         val spoken = if (type == TransactionType.INCOME) spokenIncome else spokenExpense
@@ -256,16 +311,52 @@ object VoiceLedgerParser {
         if (mapped != null) {
             hits += Candidate(mapped.keyword.length, priority = 1, mapped.keyword, mapped.categoryName)
         }
+        for ((rule, span) in matchingOverrides(text, type, categories, merchantOverrides)) {
+            val category = pool.firstOrNull { it.id == rule.categoryId } ?: continue
+            val spoken = text.substring(span)
+            hits += Candidate(spoken.length, priority = 2, spoken, category.name, merchant = spoken)
+        }
         if (hits.isEmpty()) {
             val other = pool.firstOrNull { it.name == "其他" && text.contains(it.name) } ?: return null
-            return CategoryResolution(other, other.name, listOf(other.name))
+            return CategoryResolution(other, other.name, listOf(other.name), merchant = null)
         }
         val bestLength = hits.maxOf { it.length }
         val best = hits.filter { it.length == bestLength }.maxBy { it.priority }
         val keywords = hits.filter { it.targetName == best.targetName }.map { it.keyword }.distinct()
+        val merchants = hits.mapNotNull { it.merchant }
+        val merchant = merchants.maxByOrNull { it.length }
         val category = pool.firstOrNull { it.name == best.targetName }
             ?: pool.firstOrNull { it.name == best.keyword }
-        return CategoryResolution(category, best.targetName, keywords)
+        return CategoryResolution(category, best.targetName, (keywords + merchants).distinct(), merchant)
+    }
+
+    private fun matchingOverrides(
+        text: String,
+        type: TransactionType,
+        categories: List<VoiceCategoryRef>,
+        merchantOverrides: List<VoiceMerchantOverride>,
+    ): List<Pair<VoiceMerchantOverride, IntRange>> {
+        if (merchantOverrides.isEmpty() || type == TransactionType.TRANSFER) return emptyList()
+        val ids = activeIds(categories, type)
+        if (ids.isEmpty()) return emptyList()
+        return merchantOverrides.mapNotNull { rule ->
+            if (rule.type != type || rule.categoryId !in ids) return@mapNotNull null
+            val span = merchantSpan(text, rule.merchantKey) ?: return@mapNotNull null
+            rule to span
+        }
+    }
+
+    private fun activeIds(categories: List<VoiceCategoryRef>, type: TransactionType): Set<String> {
+        val categoryType = if (type == TransactionType.INCOME) CategoryType.INCOME else CategoryType.EXPENSE
+        return categories.filter { it.type == categoryType }.map { it.id }.toSet()
+    }
+
+    private fun merchantSpan(text: String, key: String): IntRange? {
+        val compact = MerchantKey.normalize(key).replace(" ", "")
+        if (compact.length < 2) return null
+        val index = text.lowercase(Locale.ROOT).indexOf(compact)
+        if (index < 0) return null
+        return index until index + compact.length
     }
 
     private data class AccountHit(val account: VoiceAccountRef, val range: IntRange)
@@ -404,15 +495,25 @@ object VoiceLedgerParser {
         return value.toInt()
     }
 
-    private fun hasIncomeSignal(text: String): Boolean {
+    private fun hasIncomeSignal(
+        text: String,
+        categories: List<VoiceCategoryRef>,
+        merchantOverrides: List<VoiceMerchantOverride>,
+    ): Boolean {
         val masked = expenseHongbao.replace(text, "")
         if (incomeWords.any { masked.contains(it) }) return true
-        return spokenIncome.values.any { words -> words.any { text.contains(it) } }
+        if (spokenIncome.values.any { words -> words.any { text.contains(it) } }) return true
+        return matchingOverrides(text, TransactionType.INCOME, categories, merchantOverrides).isNotEmpty()
     }
 
-    private fun hasExpenseSignal(text: String): Boolean {
+    private fun hasExpenseSignal(
+        text: String,
+        categories: List<VoiceCategoryRef>,
+        merchantOverrides: List<VoiceMerchantOverride>,
+    ): Boolean {
         if (spokenExpense.values.any { words -> words.any { text.contains(it) } }) return true
-        return CategoryKeywordMapper.match(TransactionType.EXPENSE, text) != null
+        if (CategoryKeywordMapper.match(TransactionType.EXPENSE, text) != null) return true
+        return matchingOverrides(text, TransactionType.EXPENSE, categories, merchantOverrides).isNotEmpty()
     }
 
     private fun spokenWords(type: TransactionType): List<String> {

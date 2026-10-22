@@ -7,10 +7,12 @@ import com.example.localledger.data.local.converter.RoomConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.localledger.data.local.dao.AccountDao
+import com.example.localledger.data.local.dao.BackupDao
 import com.example.localledger.data.local.dao.BudgetDao
 import com.example.localledger.data.local.dao.CategoryDao
 import com.example.localledger.data.local.dao.ExchangeRateDao
 import com.example.localledger.data.local.dao.LedgerDao
+import com.example.localledger.data.local.dao.MerchantCategoryDao
 import com.example.localledger.data.local.dao.PendingDraftDao
 import com.example.localledger.data.local.dao.RecurringRuleDao
 import com.example.localledger.data.local.dao.TransactionDao
@@ -20,10 +22,13 @@ import com.example.localledger.data.local.entity.CategoryEntity
 import com.example.localledger.data.local.entity.ExchangeRateHistoryEntity
 import com.example.localledger.data.local.entity.ExchangeRateSnapshotEntity
 import com.example.localledger.data.local.entity.LedgerEntity
+import com.example.localledger.data.local.entity.MerchantCategoryRuleEntity
 import com.example.localledger.data.local.entity.PendingDraftEntity
 import com.example.localledger.data.local.entity.RecurringOccurrenceEntity
 import com.example.localledger.data.local.entity.RecurringRuleEntity
 import com.example.localledger.data.local.entity.TransactionEntity
+
+internal const val WALLET_SCHEMA_VERSION = 6
 
 @Database(
     entities = [
@@ -37,8 +42,9 @@ import com.example.localledger.data.local.entity.TransactionEntity
         ExchangeRateSnapshotEntity::class,
         ExchangeRateHistoryEntity::class,
         PendingDraftEntity::class,
+        MerchantCategoryRuleEntity::class,
     ],
-    version = 5,
+    version = WALLET_SCHEMA_VERSION,
     exportSchema = true,
 )
 @TypeConverters(RoomConverters::class)
@@ -51,10 +57,13 @@ abstract class WalletDatabase : RoomDatabase() {
     abstract fun recurringRuleDao(): RecurringRuleDao
     abstract fun exchangeRateDao(): ExchangeRateDao
     abstract fun pendingDraftDao(): PendingDraftDao
+    abstract fun backupDao(): BackupDao
+    abstract fun merchantCategoryDao(): MerchantCategoryDao
 
     companion object {
         const val FILE_NAME = "ledger.db"
-        val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+        const val SCHEMA_VERSION = WALLET_SCHEMA_VERSION
+        val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
 
         val INTEGRITY_CALLBACK = object : Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {
@@ -333,6 +342,40 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
             UPDATE `pending_drafts`
             SET `sbn_key` = `notification_key`
             WHERE `sbn_key` IS NULL AND `notification_key` IS NOT NULL
+            """.trimIndent(),
+        )
+    }
+}
+
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `transactions` ADD COLUMN `counterparty` TEXT")
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `merchant_category_rules` (
+              `id` TEXT NOT NULL,
+              `ledger_id` TEXT NOT NULL,
+              `merchant_key` TEXT NOT NULL,
+              `merchant_label` TEXT NOT NULL,
+              `type` TEXT NOT NULL,
+              `category_id` TEXT NOT NULL,
+              `updated_at` INTEGER NOT NULL,
+              PRIMARY KEY(`id`),
+              FOREIGN KEY(`ledger_id`) REFERENCES `ledgers`(`id`) ON UPDATE RESTRICT ON DELETE RESTRICT,
+              FOREIGN KEY(`category_id`) REFERENCES `categories`(`id`) ON UPDATE RESTRICT ON DELETE RESTRICT
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS `index_merchant_category_rules_ledger_id_merchant_key_type`
+            ON `merchant_category_rules` (`ledger_id`, `merchant_key`, `type`)
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            CREATE INDEX IF NOT EXISTS `index_merchant_category_rules_category_id`
+            ON `merchant_category_rules` (`category_id`)
             """.trimIndent(),
         )
     }

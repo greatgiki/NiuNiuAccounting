@@ -6,6 +6,8 @@ import android.provider.OpenableColumns
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.localledger.data.repository.BillImportRepository
+import com.example.localledger.data.repository.MerchantCategoryBook
+import com.example.localledger.domain.importing.MerchantMemoryPolicy
 import com.example.localledger.data.repository.CommitImportRow
 import com.example.localledger.data.repository.PreparedImportRow
 import com.example.localledger.domain.importing.BillParseException
@@ -75,6 +77,7 @@ class BillImportViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val appSession: AppSession,
     private val importRepository: BillImportRepository,
+    private val merchantCategories: MerchantCategoryBook,
     private val accountRepository: AccountRepository,
     private val categoryRepository: CategoryRepository,
     dateRangeResolver: DateRangeResolver,
@@ -141,8 +144,25 @@ class BillImportViewModel @Inject constructor(
     }
 
     fun onCategory(index: Int, categoryId: String) {
+        val current = _state.value.rows.firstOrNull { it.index == index } ?: return
+        if (current.categoryId == categoryId) return
         _state.update { state ->
             state.copy(rows = state.rows.map { if (it.index == index) it.copy(categoryId = categoryId) else it })
+        }
+        val ledgerId = appSession.state.value.currentLedgerId ?: return
+        if (
+            !MerchantMemoryPolicy.shouldRemember(
+                type = current.type,
+                merchant = current.counterparty,
+                categoryId = categoryId,
+                previousCategoryId = current.categoryId,
+                categoryChanged = true,
+            )
+        ) {
+            return
+        }
+        viewModelScope.launch {
+            merchantCategories.remember(ledgerId, current.type, current.counterparty, categoryId)
         }
     }
 

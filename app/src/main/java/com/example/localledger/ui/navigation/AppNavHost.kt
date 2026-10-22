@@ -58,8 +58,11 @@ import androidx.navigation.navArgument
 import com.example.localledger.domain.model.CategoryType
 import com.example.localledger.domain.model.TransactionType
 import com.example.localledger.notification.PendingNavigation
+import com.example.localledger.security.AppLockController
+import com.example.localledger.security.AppLockState
 import com.example.localledger.ui.AppSession
 import com.example.localledger.ui.account.AccountManageScreen
+import com.example.localledger.ui.calendar.CalendarScreen
 import com.example.localledger.ui.budget.BudgetManageScreen
 import com.example.localledger.ui.category.CategoryManageScreen
 import com.example.localledger.ui.detail.TransactionListScreen
@@ -70,6 +73,10 @@ import com.example.localledger.ui.importing.BillImportScreen
 import com.example.localledger.ui.importing.DraftInboxScreen
 import com.example.localledger.ui.ledger.LedgerManageScreen
 import com.example.localledger.ui.recurring.RecurringRuleScreen
+import com.example.localledger.ui.backup.BackupScreen
+import com.example.localledger.ui.exporting.ExportScreen
+import com.example.localledger.ui.lock.AppLockSettingsScreen
+import com.example.localledger.ui.settings.MerchantCategoryScreen
 import com.example.localledger.ui.settings.SettingsScreen
 import com.example.localledger.ui.statistics.StatisticsScreen
 import kotlinx.coroutines.launch
@@ -89,6 +96,11 @@ object Routes {
     const val IMPORT = "import"
     const val AUTO_RECORD = "auto-record"
     const val DRAFTS = "drafts"
+    const val BACKUP = "backup"
+    const val EXPORT = "export"
+    const val APP_LOCK = "app-lock"
+    const val CALENDAR = "calendar"
+    const val MERCHANT_CATEGORIES = "merchant-categories"
     const val TRANSACTIONS_PATTERN =
         "transactions?type={type}&categoryId={categoryId}&accountId={accountId}" +
             "&startDate={startDate}&endDate={endDate}"
@@ -96,8 +108,10 @@ object Routes {
     const val TRANSACTION_EDIT = "transaction/edit/{transactionId}"
     const val CATEGORIES = "categories/{categoryType}"
 
-    fun transactionNew(type: TransactionType = TransactionType.EXPENSE, voice: Boolean = false) =
-        "transaction/new?type=${type.name}&voice=$voice"
+    fun transactionNew(type: TransactionType = TransactionType.EXPENSE, voice: Boolean = false): String {
+        val base = "transaction/new?type=${type.name}"
+        return if (voice) "$base&voice=true" else base
+    }
 
     fun transactionEdit(transactionId: String) = "transaction/edit/$transactionId"
 
@@ -154,7 +168,11 @@ internal fun isFilteredTransactionRoute(route: String?): Boolean {
 val LocalSelectTopLevelPage = staticCompositionLocalOf<(TopLevelPage) -> Unit> { {} }
 
 @Composable
-fun AppNavHost(appSession: AppSession, pendingNavigation: PendingNavigation) {
+fun AppNavHost(
+    appSession: AppSession,
+    pendingNavigation: PendingNavigation,
+    appLock: AppLockController,
+) {
     val navController = rememberNavController()
     val pagerState = rememberPagerState(pageCount = { TopLevelPage.entries.size })
     val scope = rememberCoroutineScope()
@@ -197,7 +215,11 @@ fun AppNavHost(appSession: AppSession, pendingNavigation: PendingNavigation) {
                         currentRoute = currentRoute,
                         onSelect = selectPage,
                         onCreate = { navController.navigate(Routes.transactionNew()) },
-                        onVoice = { navController.navigate(Routes.transactionNew(voice = true)) },
+                        onVoice = {
+                            if (appLock.state.value.phase == AppLockState.Phase.Unlocked) {
+                                navController.navigate(Routes.transactionNew(voice = true))
+                            }
+                        },
                     )
                 }
             },
@@ -286,6 +308,21 @@ fun AppNavHost(appSession: AppSession, pendingNavigation: PendingNavigation) {
                 }
                 composable(Routes.DRAFTS) {
                     DraftInboxScreen(navController = navController)
+                }
+                composable(Routes.BACKUP) {
+                    BackupScreen(navController = navController)
+                }
+                composable(Routes.EXPORT) {
+                    ExportScreen(navController = navController)
+                }
+                composable(Routes.APP_LOCK) {
+                    AppLockSettingsScreen(navController = navController)
+                }
+                composable(Routes.CALENDAR) {
+                    CalendarScreen(navController = navController)
+                }
+                composable(Routes.MERCHANT_CATEGORIES) {
+                    MerchantCategoryScreen(navController = navController)
                 }
                 composable(
                     route = Routes.CATEGORIES,

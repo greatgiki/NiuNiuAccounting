@@ -5,6 +5,7 @@ import androidx.room.Query
 import androidx.room.Upsert
 import com.example.localledger.data.local.entity.TransactionEntity
 import com.example.localledger.data.local.model.CategoryTotalRow
+import com.example.localledger.data.local.model.DayAmountRow
 import com.example.localledger.data.local.model.ExternalKeyRow
 import com.example.localledger.data.local.model.FuzzyTransactionRow
 import com.example.localledger.data.local.model.IncomeExpenseSummaryRow
@@ -40,6 +41,31 @@ interface TransactionDao {
 
     @Query("SELECT * FROM transactions WHERE ledger_id = :ledgerId ORDER BY transaction_at ASC, created_at ASC")
     suspend fun listByLedger(ledgerId: String): List<TransactionEntity>
+
+    @Query(
+        """
+        SELECT t.*,
+            source.name AS account_name,
+            destination.name AS to_account_name,
+            c.name AS category_name,
+            c.icon_key AS category_icon_key,
+            source.currency_code AS account_currency_code,
+            destination.currency_code AS to_account_currency_code
+        FROM transactions t
+        JOIN accounts source ON source.id = t.account_id
+        LEFT JOIN accounts destination ON destination.id = t.to_account_id
+        LEFT JOIN categories c ON c.id = t.category_id
+        WHERE t.ledger_id = :ledgerId
+          AND t.transaction_at >= :startInclusive
+          AND t.transaction_at < :endExclusive
+        ORDER BY t.transaction_at ASC, t.created_at ASC
+        """,
+    )
+    suspend fun listDetailsInRange(
+        ledgerId: String,
+        startInclusive: Long,
+        endExclusive: Long,
+    ): List<TransactionDetailRow>
 
     @Query(
         """
@@ -158,6 +184,39 @@ interface TransactionDao {
         startInclusive: Long,
         endExclusive: Long,
     ): Flow<IncomeExpenseSummaryRow>
+
+    @Query(
+        """
+        SELECT
+            COALESCE(SUM(CASE WHEN type = 'INCOME' THEN base_amount_minor ELSE 0 END), 0) AS income_minor,
+            COALESCE(SUM(CASE WHEN type = 'EXPENSE' THEN base_amount_minor ELSE 0 END), 0) AS expense_minor
+        FROM transactions
+        WHERE ledger_id = :ledgerId
+          AND transaction_at >= :startInclusive
+          AND transaction_at < :endExclusive
+        """,
+    )
+    suspend fun summary(
+        ledgerId: String,
+        startInclusive: Long,
+        endExclusive: Long,
+    ): IncomeExpenseSummaryRow
+
+    @Query(
+        """
+        SELECT transaction_at, type, base_amount_minor
+        FROM transactions
+        WHERE ledger_id = :ledgerId
+          AND transaction_at >= :startInclusive
+          AND transaction_at < :endExclusive
+          AND type IN ('INCOME', 'EXPENSE')
+        """,
+    )
+    suspend fun listDayAmounts(
+        ledgerId: String,
+        startInclusive: Long,
+        endExclusive: Long,
+    ): List<DayAmountRow>
 
     @Query(
         """

@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.Search
@@ -137,6 +138,9 @@ fun TransactionListScreen(
                     .weight(1f)
                     .semantics { contentDescription = "搜索备注" },
             )
+            IconButton(onClick = { navController.navigate(Routes.CALENDAR) }) {
+                Icon(Icons.Outlined.CalendarMonth, contentDescription = "日历")
+            }
             IconButton(onClick = { showFilterSheet = true }) {
                 Icon(Icons.Outlined.FilterList, contentDescription = "筛选")
             }

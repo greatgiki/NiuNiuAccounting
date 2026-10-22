@@ -14,6 +14,27 @@
 -keep class com.example.localledger.notification.DraftActionReceiver_GeneratedInjector { *; }
 -keep class * extends android.service.notification.NotificationListenerService { *; }
 -keep class com.example.localledger.data.work.RecurringTransactionWorker { *; }
+-keep class com.example.localledger.data.work.AutoBackupWorker { *; }
+-keep class com.example.localledger.security.BiometricUnlockActivity { *; }
+# The launcher instantiates the receiver by the manifest class name. Glance
+# handles updates on the base class, which R8 otherwise treats as unused.
+-keep class com.example.localledger.widget.LedgerSummaryWidgetReceiver { *; }
+-keep class com.example.localledger.widget.LedgerSummaryWidget { *; }
+-keep class androidx.glance.appwidget.GlanceAppWidgetReceiver { *; }
+-keep class * extends androidx.glance.appwidget.GlanceAppWidgetReceiver { *; }
+-keep class * extends androidx.glance.appwidget.GlanceAppWidget { *; }
+-keep class com.example.localledger.widget.WidgetEntryPoint { *; }
+-keep class * implements com.example.localledger.widget.WidgetEntryPoint { *; }
+
+-keepclassmembers class com.example.localledger.data.backup.** {
+    *** Companion;
+}
+-keep class com.example.localledger.data.backup.**$$serializer { *; }
+-keepclassmembers class com.example.localledger.security.PinRecord {
+    <init>(...);
+    *** Companion;
+}
+-keep class com.example.localledger.security.PinRecord$$serializer { *; }
 
 -keepattributes *Annotation*, Signature, InnerClasses, EnclosingMethod, RuntimeVisibleAnnotations, RuntimeVisibleParameterAnnotations
 
