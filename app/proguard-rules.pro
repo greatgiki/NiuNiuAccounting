@@ -44,6 +44,27 @@
 -keep class com.example.localledger.core.storage.AppSettings$$serializer { *; }
 -keep class com.example.localledger.notification.NotificationDiagnostic { *; }
 -keep class com.example.localledger.notification.NotificationDiagnostic$$serializer { *; }
+-keepclassmembers class com.example.localledger.data.ai.AiAssistantSettings {
+    <init>(...);
+    *** Companion;
+}
+-keep class com.example.localledger.data.ai.AiAssistantSettings$$serializer { *; }
+-keepclassmembers class com.example.localledger.data.ai.AiUsageRecord {
+    <init>(...);
+    *** Companion;
+}
+-keep class com.example.localledger.data.ai.AiUsageRecord$$serializer { *; }
+-keepclassmembers class com.example.localledger.domain.ai.AiPreset {
+    <init>(...);
+    **[] values();
+    ** valueOf(java.lang.String);
+}
+-keepclassmembers class com.example.localledger.domain.ai.AiWireFormat {
+    <init>(...);
+    **[] values();
+    ** valueOf(java.lang.String);
+}
+
 -keepclassmembers class com.example.localledger.core.storage.ThemeMode {
     <init>(...);
     **[] values();
