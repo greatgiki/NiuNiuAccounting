@@ -2,4 +2,6 @@
 <resources>
     <color name="ic_launcher_background">#1C1915</color>
     <color name="window_background">#F4EFE6</color>
+    <!-- Light ivory widget surface. The live widget tints the shape for night mode. -->
+    <color name="widget_surface">#F7F2EA</color>
 </resources>
