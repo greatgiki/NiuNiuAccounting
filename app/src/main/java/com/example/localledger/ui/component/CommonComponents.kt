@@ -1,5 +1,9 @@
 package com.example.localledger.ui.component
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -24,7 +28,6 @@ import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -51,6 +54,7 @@ import com.example.localledger.ui.navigation.claimPagerHorizontalGesture
 import com.example.localledger.ui.common.DateTimeFormatters
 import com.example.localledger.ui.common.MoneyFormatter
 import com.example.localledger.ui.common.categoryAccent
+import com.example.localledger.ui.theme.LedgerMotion
 import com.example.localledger.ui.theme.LocalLedgerTones
 import com.example.localledger.ui.theme.amountColor
 import java.time.ZoneId
@@ -176,7 +180,7 @@ fun ConfirmDeleteDialog(
     submitting: Boolean = false,
     errorMessage: String? = null,
 ) {
-    AlertDialog(
+    LedgerAlertDialog(
         onDismissRequest = { if (!submitting) onDismiss() },
         icon = { Icon(confirmIcon(confirmLabel), contentDescription = null) },
         title = { Text(title) },
@@ -316,12 +320,30 @@ fun SummaryAmountRow(
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            MoneyText(
-                amountMinor = incomeMinor - expenseMinor,
-                style = MaterialTheme.typography.titleMedium,
-                currencyCode = currencyCode,
-            )
+            AmountCrossfade(amountMinor = incomeMinor - expenseMinor) { amount ->
+                MoneyText(
+                    amountMinor = amount,
+                    style = MaterialTheme.typography.titleMedium,
+                    currencyCode = currencyCode,
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun AmountCrossfade(
+    amountMinor: Long,
+    content: @Composable (Long) -> Unit,
+) {
+    AnimatedContent(
+        targetState = amountMinor,
+        transitionSpec = {
+            fadeIn(LedgerMotion.short()) togetherWith fadeOut(LedgerMotion.short())
+        },
+        label = "summary-amount",
+    ) { amount ->
+        content(amount)
     }
 }
 
@@ -333,12 +355,14 @@ private fun SummaryItem(label: String, amountMinor: Long, type: TransactionType,
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        TransactionAmountText(
-            type = type,
-            amountMinor = amountMinor,
-            style = MaterialTheme.typography.titleMedium,
-            currencyCode = currencyCode,
-        )
+        AmountCrossfade(amountMinor = amountMinor) { amount ->
+            TransactionAmountText(
+                type = type,
+                amountMinor = amount,
+                style = MaterialTheme.typography.titleMedium,
+                currencyCode = currencyCode,
+            )
+        }
     }
 }
 
@@ -353,10 +377,13 @@ fun TransactionRowContent(
     iconKey: String?,
     modifier: Modifier = Modifier,
     currencyCode: String = "CNY",
+    appearIndex: Int = -1,
 ) {
     val accent = categoryAccent(iconKey, type)
+    val entrance = if (appearIndex >= 0) Modifier.ledgerAppear(appearIndex) else Modifier
     Row(
         modifier = modifier
+            .then(entrance)
             .fillMaxWidth()
             .heightIn(min = 48.dp)
             .padding(vertical = 10.dp)

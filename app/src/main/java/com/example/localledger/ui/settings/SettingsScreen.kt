@@ -1,6 +1,7 @@
 package com.example.localledger.ui.settings
 
-import androidx.compose.foundation.clickable
+import com.example.localledger.ui.component.LedgerAlertDialog
+import com.example.localledger.ui.component.ledgerClickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -28,7 +29,6 @@ import androidx.compose.material.icons.outlined.Savings
 import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material.icons.outlined.SettingsBackupRestore
 import androidx.compose.material.icons.outlined.TableChart
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -258,7 +258,7 @@ internal fun RevalueConfirmDialog(
     submitting: Boolean = false,
     errorMessage: String? = null,
 ) {
-    AlertDialog(
+    LedgerAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("按当前汇率重算？") },
         text = {
@@ -291,7 +291,7 @@ private fun SettingsEntry(label: String, icon: ImageVector, onClick: () -> Unit)
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp)
-            .clickable(onClick = onClick)
+            .ledgerClickable(onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
