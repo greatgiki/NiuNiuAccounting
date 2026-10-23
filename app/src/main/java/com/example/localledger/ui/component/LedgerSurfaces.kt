@@ -2,7 +2,9 @@ package com.example.localledger.ui.component
 
 import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.material3.HorizontalDivider
@@ -25,7 +27,18 @@ fun LedgerCard(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val tones = LocalLedgerTones.current
-    val clickable = if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
+    val interaction = remember { MutableInteractionSource() }
+    val clickable = if (onClick != null) {
+        Modifier
+            .ledgerPress(interaction)
+            .clickable(
+                interactionSource = interaction,
+                indication = LocalIndication.current,
+                onClick = onClick,
+            )
+    } else {
+        Modifier
+    }
     Surface(
         modifier = modifier.then(clickable),
         shape = MaterialTheme.shapes.large,

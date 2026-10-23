@@ -1,5 +1,8 @@
 package com.example.localledger.ui.recurring
 
+import com.example.localledger.ui.component.LedgerDatePickerDialog
+import com.example.localledger.ui.component.LedgerAlertDialog
+import com.example.localledger.ui.component.ledgerSurfaceEnter
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,10 +20,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Surface
@@ -272,7 +273,7 @@ internal fun ResumeRuleDialog(
     submitting: Boolean = false,
     errorMessage: String? = null,
 ) {
-    AlertDialog(
+    LedgerAlertDialog(
         onDismissRequest = { if (!submitting) onDismiss() },
         title = { Text("恢复这条周期规则？") },
         text = {
@@ -308,7 +309,7 @@ internal fun DeleteRuleDialog(
     submitting: Boolean = false,
     errorMessage: String? = null,
 ) {
-    AlertDialog(
+    LedgerAlertDialog(
         onDismissRequest = { if (!submitting) onDismiss() },
         title = { Text("删除周期规则？") },
         text = {
@@ -370,7 +371,10 @@ internal fun RuleDialog(
         onDismissRequest = { if (!submitting) onDismiss() },
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
     ) {
-        Surface(modifier = Modifier.fillMaxSize(), shape = MaterialTheme.shapes.extraLarge) {
+        Surface(
+            modifier = Modifier.fillMaxSize().ledgerSurfaceEnter(),
+            shape = MaterialTheme.shapes.extraLarge,
+        ) {
         Column(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -532,7 +536,7 @@ private fun RuleDatePicker(
     val pickerState = rememberDatePickerState(
         initialSelectedDateMillis = initial.atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli(),
     )
-    DatePickerDialog(
+    LedgerDatePickerDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
             TextButton(

@@ -1,5 +1,7 @@
 package com.example.localledger.ui.detail
 
+import com.example.localledger.ui.component.LedgerDatePickerDialog
+import com.example.localledger.ui.component.LedgerAlertDialog
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -14,7 +16,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
@@ -28,7 +30,6 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -203,7 +204,10 @@ fun TransactionListScreen(
                     .testTag("transaction-list")
                     .semantics { testTagsAsResourceId = true },
             ) {
+                var appearBase = 0
                 state.groups.forEach { group ->
+                    val groupStart = appearBase
+                    appearBase += group.items.size
                     stickyHeader(key = "header-${group.date}", contentType = "day-header") {
                         val currency = session.currentLedgerCurrency
                         Row(
@@ -226,11 +230,11 @@ fun TransactionListScreen(
                             )
                         }
                     }
-                    items(
+                    itemsIndexed(
                         group.items,
-                        key = { it.transaction.id },
-                        contentType = { "transaction" },
-                    ) { detail ->
+                        key = { _, item -> item.transaction.id },
+                        contentType = { _, _ -> "transaction" },
+                    ) { index, detail ->
                         val transactionId = detail.transaction.id
                         val open = remember(transactionId) {
                             {
@@ -253,6 +257,7 @@ fun TransactionListScreen(
                                 timeMillis = detail.transaction.transactionAt,
                                 zoneId = zoneId,
                                 iconKey = detail.categoryIconKey,
+                                appearIndex = groupStart + index,
                                 modifier = Modifier.combinedClickable(
                                     onClick = open,
                                     onLongClick = askDelete,
@@ -310,7 +315,7 @@ fun TransactionListScreen(
     }
 
     message?.let { text ->
-        androidx.compose.material3.AlertDialog(
+        com.example.localledger.ui.component.LedgerAlertDialog(
             onDismissRequest = { message = null },
             confirmButton = {
                 TextButton(onClick = { message = null }) { Text("知道了") }
@@ -503,7 +508,7 @@ private fun FilterSheet(
             initialSelectedDateMillis = (startDate ?: LocalDate.now())
                 .atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli(),
         )
-        DatePickerDialog(
+        LedgerDatePickerDialog(
             onDismissRequest = { pickingStart = false },
             confirmButton = {
                 TextButton(
@@ -529,7 +534,7 @@ private fun FilterSheet(
             initialSelectedDateMillis = (endDate ?: LocalDate.now())
                 .atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli(),
         )
-        DatePickerDialog(
+        LedgerDatePickerDialog(
             onDismissRequest = { pickingEnd = false },
             confirmButton = {
                 TextButton(
