@@ -1,5 +1,6 @@
 package com.example.localledger.ui.account
 
+import com.example.localledger.ui.component.LedgerAlertDialog
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,7 +24,6 @@ import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -303,7 +303,7 @@ private fun AccountEditDialog(
     }
     var sortText by remember { mutableStateOf(account?.sortOrder?.toString() ?: "0") }
 
-    AlertDialog(
+    LedgerAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (account == null) "新建账户" else "编辑账户") },
         text = {

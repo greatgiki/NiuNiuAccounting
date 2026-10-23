@@ -15,7 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.rememberPagerState
@@ -368,7 +368,11 @@ private fun DaySection(
                 modifier = Modifier.fillMaxSize().testTag("calendar-day"),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
             ) {
-                items(rows, key = { it.transaction.id }, contentType = { "calendar-tx" }) { detail ->
+                itemsIndexed(
+                    rows,
+                    key = { _, item -> item.transaction.id },
+                    contentType = { _, _ -> "calendar-tx" },
+                ) { index, detail ->
                     val id = detail.transaction.id
                     val open = remember(id) { { onOpen(id) } }
                     TransactionRowContent(
@@ -380,6 +384,7 @@ private fun DaySection(
                         timeMillis = detail.transaction.transactionAt,
                         zoneId = java.time.ZoneId.systemDefault(),
                         iconKey = detail.categoryIconKey,
+                        appearIndex = index,
                         modifier = Modifier.clickable(onClick = open),
                     )
                 }

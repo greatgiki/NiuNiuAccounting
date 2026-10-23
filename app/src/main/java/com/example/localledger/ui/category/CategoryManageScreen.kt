@@ -1,5 +1,6 @@
 package com.example.localledger.ui.category
 
+import com.example.localledger.ui.component.LedgerAlertDialog
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,7 +19,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -292,7 +292,7 @@ private fun CategoryEditDialog(
     var iconKey by remember { mutableStateOf(category?.iconKey ?: CategoryIcons.fallback.key) }
     var sortText by remember { mutableStateOf(category?.sortOrder?.toString() ?: "0") }
 
-    AlertDialog(
+    LedgerAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (category == null) "新建分类" else "编辑分类") },
         text = {

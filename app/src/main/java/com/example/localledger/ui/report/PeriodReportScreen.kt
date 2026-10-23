@@ -1,5 +1,7 @@
 package com.example.localledger.ui.report
 
+import com.example.localledger.ui.component.LedgerDatePickerDialog
+import com.example.localledger.ui.component.LedgerAlertDialog
 import android.graphics.Bitmap
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -18,9 +20,7 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Share
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -324,7 +324,7 @@ private fun WeekPicker(
         val dateState = rememberDatePickerState(
             initialSelectedDateMillis = initial.atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli(),
         )
-        DatePickerDialog(
+        LedgerDatePickerDialog(
             onDismissRequest = onDismiss,
             confirmButton = {
                 TextButton(onClick = {
@@ -349,7 +349,7 @@ private fun MonthPicker(
 ) {
     var yearText by remember { mutableStateOf(initial.year.toString()) }
     var monthText by remember { mutableStateOf(initial.monthValue.toString()) }
-    AlertDialog(
+    LedgerAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("选择月份") },
         text = {

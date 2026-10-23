@@ -1,7 +1,10 @@
 package com.example.localledger.ui.statistics
 
+import com.example.localledger.ui.component.LedgerDatePickerDialog
+import com.example.localledger.ui.component.LedgerAlertDialog
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.AnimationVector1D
+import com.example.localledger.ui.theme.LedgerMotion
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -28,9 +31,7 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.Surface
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -367,7 +368,7 @@ private fun PeriodPickerDialog(
         }
         key(isStart, initial) {
             val dateState = rememberDatePickerState(initialSelectedDateMillis = initial.atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli())
-            DatePickerDialog(
+            LedgerDatePickerDialog(
             onDismissRequest = onDismiss,
             confirmButton = {
                 TextButton(onClick = {
@@ -413,7 +414,7 @@ private fun PeriodPickerDialog(
             }
         }
     } else {
-        AlertDialog(
+        LedgerAlertDialog(
             onDismissRequest = onDismiss,
             title = { Text(if (picker == PeriodPicker.MONTH) "选择月份" else "选择年份") },
             text = {
@@ -456,19 +457,16 @@ internal fun ExpenseShareChart(
     }
     val colors = chartPalette(LocalLedgerDarkTheme.current)
     val progress = remember { Animatable(0f) }
-    LaunchedEffect(slices) {
-        progress.snapTo(0f)
-        progress.animateTo(1f, com.example.localledger.ui.theme.LedgerMotion.medium())
-    }
+    LaunchedEffect(slices) { progress.playChartEntry() }
     BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
         if (maxWidth < 360.dp) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                ShareDonut(slices, total, colors, currencyCode, progress.value)
+                ShareDonut(slices, total, colors, currencyCode, progress)
                 ShareLegend(slices, total, colors, currencyCode, modifier = Modifier.fillMaxWidth())
             }
         } else {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                ShareDonut(slices, total, colors, currencyCode, progress.value)
+                ShareDonut(slices, total, colors, currencyCode, progress)
                 Spacer(Modifier.width(12.dp))
                 ShareLegend(slices, total, colors, currencyCode, modifier = Modifier.weight(1f))
             }
@@ -482,7 +480,7 @@ private fun ShareDonut(
     total: Long,
     colors: List<Color>,
     currencyCode: String,
-    progress: Float,
+    progress: Animatable<Float, AnimationVector1D>,
 ) {
     Box(modifier = Modifier.size(148.dp), contentAlignment = Alignment.Center) {
         Canvas(
@@ -506,12 +504,13 @@ private fun ShareDonut(
                 )
             } else {
                 var start = -90f
+                val drawn = progress.value
                 slices.forEachIndexed { index, (_, amount) ->
                     val fullSweep = RatioMath.fraction(amount, total) * 360f
                     drawArc(
                         color = colors[index % colors.size],
                         startAngle = start,
-                        sweepAngle = fullSweep * progress,
+                        sweepAngle = fullSweep * drawn,
                         useCenter = false,
                         topLeft = topLeft,
                         size = arcSize,
@@ -577,10 +576,7 @@ internal fun ExpenseCategoryBars(
     onCategoryClick: (String) -> Unit,
 ) {
     val progress = remember { Animatable(0f) }
-    LaunchedEffect(categories, totalMinor) {
-        progress.snapTo(0f)
-        progress.animateTo(1f, com.example.localledger.ui.theme.LedgerMotion.medium())
-    }
+    LaunchedEffect(categories, totalMinor) { progress.playChartEntry() }
     val track = MaterialTheme.colorScheme.surfaceVariant
     val sliceColors = chartPalette(LocalLedgerDarkTheme.current)
     Column {
@@ -634,10 +630,11 @@ internal fun ExpenseCategoryBars(
                     Spacer(Modifier.height(4.dp))
                     Canvas(modifier = Modifier.fillMaxWidth().height(8.dp)) {
                         val radius = CornerRadius(size.height / 2f, size.height / 2f)
+                        val drawn = size.width * fraction * progress.value
                         drawRoundRect(color = track, cornerRadius = radius)
                         drawRoundRect(
                             color = slice,
-                            size = Size(size.width * fraction * progress.value, size.height),
+                            size = Size(drawn, size.height),
                             cornerRadius = radius,
                         )
                     }
@@ -661,10 +658,7 @@ private fun IncomeExpenseTrendChart(
     val description = "收支趋势图，共${points.size}个时间点。窄屏可横向滑动，点击收入或支出柱查看明细"
     var selected by remember { mutableStateOf<TrendSelection?>(null) }
     val progress = remember { Animatable(0f) }
-    LaunchedEffect(points) {
-        progress.snapTo(0f)
-        progress.animateTo(1f, com.example.localledger.ui.theme.LedgerMotion.medium())
-    }
+    LaunchedEffect(points) { progress.playChartEntry() }
     val gridColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
 
     Column {
@@ -753,7 +747,7 @@ private fun IncomeExpenseTrendChart(
                                     value = point.incomeMinor,
                                     maxValue = maxValue,
                                     color = incomeColor,
-                                    progress = progress.value,
+                                    progress = progress,
                                     description = "收入 ${point.label}",
                                     onClick = { selected = TrendSelection(index, TransactionType.INCOME) },
                                 )
@@ -761,7 +755,7 @@ private fun IncomeExpenseTrendChart(
                                     value = point.expenseMinor,
                                     maxValue = maxValue,
                                     color = expenseColor,
-                                    progress = progress.value,
+                                    progress = progress,
                                     description = "支出 ${point.label}",
                                     onClick = { selected = TrendSelection(index, TransactionType.EXPENSE) },
                                 )
@@ -787,11 +781,10 @@ private fun TrendBar(
     value: Long,
     maxValue: Long,
     color: Color,
-    progress: Float,
+    progress: Animatable<Float, AnimationVector1D>,
     description: String,
     onClick: () -> Unit,
 ) {
-    val fraction = RatioMath.fraction(value, maxValue) * progress
     Box(
         modifier = Modifier
             .width(24.dp)
@@ -802,6 +795,7 @@ private fun TrendBar(
         contentAlignment = Alignment.BottomCenter,
     ) {
         Canvas(modifier = Modifier.width(8.dp).fillMaxHeight()) {
+            val fraction = RatioMath.fraction(value, maxValue) * progress.value
             val barHeight = (size.height * fraction).coerceAtLeast(if (value > 0) 2f else 0f)
             val radius = CornerRadius(size.width / 2f, size.width / 2f)
             drawRoundRect(
@@ -811,6 +805,15 @@ private fun TrendBar(
                 cornerRadius = radius,
             )
         }
+    }
+}
+
+private suspend fun Animatable<Float, AnimationVector1D>.playChartEntry() {
+    if (!LedgerMotion.animationsEnabled()) {
+        snapTo(1f)
+    } else {
+        snapTo(0f)
+        animateTo(1f, LedgerMotion.medium())
     }
 }
 

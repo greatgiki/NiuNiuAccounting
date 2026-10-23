@@ -1,7 +1,9 @@
 package com.example.localledger.ui.lock
 
+import com.example.localledger.ui.component.LedgerAlertDialog
 import android.app.Activity
 import android.content.Intent
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.biometric.BiometricManager
@@ -26,7 +28,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Backspace
 import androidx.compose.material.icons.outlined.Fingerprint
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -115,6 +116,9 @@ fun AppLockSettingsScreen(navController: NavHostController, viewModel: AppLockVi
             BiometricManager.BIOMETRIC_SUCCESS
     }
     var flow by remember { mutableStateOf<PinFlow>(PinFlow.None) }
+    // Registered inside the destination, after PredictiveBackFrame, so a pin step
+    // wins the gesture and only clears itself when the gesture is released.
+    BackHandler(enabled = flow != PinFlow.None) { flow = PinFlow.None }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -377,7 +381,7 @@ fun LockScreen(
 
 @Composable
 fun ForgotPinDialog(onDismiss: () -> Unit) {
-    AlertDialog(
+    LedgerAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("无法找回密码") },
         text = {

@@ -1,5 +1,6 @@
 package com.example.localledger.ui.ledger
 
+import com.example.localledger.ui.component.LedgerAlertDialog
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,7 +15,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -277,7 +277,7 @@ fun NameInputDialog(
 ) {
     var value by remember { mutableStateOf(initialValue) }
     var currency by remember { mutableStateOf(initialCurrency) }
-    AlertDialog(
+    LedgerAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {

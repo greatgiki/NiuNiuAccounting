@@ -1,9 +1,10 @@
 package com.example.localledger.ui.editor
 
-import androidx.compose.animation.core.animateFloatAsState
+import com.example.localledger.ui.component.LedgerDatePickerDialog
+import com.example.localledger.ui.component.LedgerAlertDialog
+import com.example.localledger.ui.component.ledgerPress
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,9 +28,7 @@ import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.SwapHoriz
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -61,7 +60,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -79,7 +77,6 @@ import com.example.localledger.ui.common.DateTimeFormatters
 import com.example.localledger.ui.component.AmountField
 import com.example.localledger.ui.component.LedgerSnackbarHost
 import com.example.localledger.ui.component.rememberLedgerHaptic
-import com.example.localledger.ui.theme.LedgerMotion
 import com.example.localledger.ui.theme.LocalLedgerDarkTheme
 import com.example.localledger.ui.component.CategoryIconGrid
 import com.example.localledger.ui.component.ConfirmDeleteDialog
@@ -438,7 +435,7 @@ private fun EditorContent(
                 .toInstant()
                 .toEpochMilli(),
         )
-        DatePickerDialog(
+        LedgerDatePickerDialog(
             onDismissRequest = { showDatePicker = false },
             confirmButton = {
                 TextButton(
@@ -468,7 +465,7 @@ private fun EditorContent(
             initialMinute = current.minute,
             is24Hour = true,
         )
-        AlertDialog(
+        LedgerAlertDialog(
             onDismissRequest = { showTimePicker = false },
             confirmButton = {
                 TextButton(
@@ -564,12 +561,6 @@ private fun KeypadKey(
     icon: (@Composable () -> Unit)? = null,
 ) {
     val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed && enabled) 0.96f else 1f,
-        animationSpec = LedgerMotion.short(),
-        label = "key-press",
-    )
     Surface(
         onClick = onClick,
         enabled = enabled,
@@ -578,10 +569,7 @@ private fun KeypadKey(
         contentColor = contentColor,
         interactionSource = interaction,
         modifier = modifier
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
+            .ledgerPress(interaction)
             .semantics { contentDescription = if (label.isEmpty()) "退格" else label },
     ) {
         Box(contentAlignment = Alignment.Center) {

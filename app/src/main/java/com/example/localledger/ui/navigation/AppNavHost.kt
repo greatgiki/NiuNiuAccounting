@@ -1,11 +1,9 @@
 package com.example.localledger.ui.navigation
 
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,11 +41,15 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.example.localledger.ui.component.LedgerHairline
+import com.example.localledger.ui.component.ledgerPress
 import com.example.localledger.ui.component.rememberLedgerHaptic
 import com.example.localledger.ui.theme.LedgerMotion
+import androidx.navigation.NamedNavArgument
+import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -163,7 +165,7 @@ enum class TopLevelPage(
 
 internal const val TAB_SWITCH_MILLIS = LedgerMotion.Medium
 
-internal fun <T> tabSwitchTween() = LedgerMotion.medium<T>()
+internal fun <T> tabSwitchTween() = LedgerMotion.spec<T>(LedgerMotion.Medium, LedgerMotion.Emphasized)
 
 internal fun pageFadeAlpha(currentPage: Int, currentPageOffsetFraction: Float, page: Int): Float {
     val distance = abs((currentPage - page) + currentPageOffsetFraction).coerceIn(0f, 1f)
@@ -243,20 +245,12 @@ fun AppNavHost(
                     // nested bars from adding a second status-bar gap.
                     .consumeWindowInsets(padding)
                     .background(MaterialTheme.colorScheme.background),
-                enterTransition = {
-                    slideInHorizontally(tabSwitchTween()) { it } + fadeIn(tabSwitchTween())
-                },
-                exitTransition = {
-                    slideOutHorizontally(tabSwitchTween()) { -it / 4 } + fadeOut(tabSwitchTween())
-                },
-                popEnterTransition = {
-                    slideInHorizontally(tabSwitchTween()) { -it / 4 } + fadeIn(tabSwitchTween())
-                },
-                popExitTransition = {
-                    slideOutHorizontally(tabSwitchTween()) { it } + fadeOut(tabSwitchTween())
-                },
+                enterTransition = { ledgerForwardEnter() },
+                exitTransition = { ledgerForwardExit() },
+                popEnterTransition = { ledgerPopEnter() },
+                popExitTransition = { ledgerPopExit() },
             ) {
-                composable(Routes.MAIN) {
+                ledgerPage(navController, Routes.MAIN) {
                     TopLevelPager(
                         appSession = appSession,
                         navController = navController,
@@ -266,7 +260,7 @@ fun AppNavHost(
                         onPendingPageConsumed = { pendingPage.value = null },
                     )
                 }
-                composable(
+                ledgerPage(navController, 
                     route = Routes.TRANSACTIONS_PATTERN,
                     arguments = listOf(
                         navArgument("type") {
@@ -298,46 +292,46 @@ fun AppNavHost(
                 ) {
                     TransactionListScreen(appSession = appSession, navController = navController)
                 }
-                composable(Routes.LEDGERS) {
+                ledgerPage(navController, Routes.LEDGERS) {
                     LedgerManageScreen(appSession = appSession, navController = navController)
                 }
-                composable(Routes.ACCOUNTS) {
+                ledgerPage(navController, Routes.ACCOUNTS) {
                     AccountManageScreen(appSession = appSession, navController = navController)
                 }
-                composable(Routes.BUDGETS) {
+                ledgerPage(navController, Routes.BUDGETS) {
                     BudgetManageScreen(navController = navController)
                 }
-                composable(Routes.RECURRING) {
+                ledgerPage(navController, Routes.RECURRING) {
                     RecurringRuleScreen(navController = navController)
                 }
-                composable(Routes.IMPORT) {
+                ledgerPage(navController, Routes.IMPORT) {
                     BillImportScreen(navController = navController)
                 }
-                composable(Routes.AUTO_RECORD) {
+                ledgerPage(navController, Routes.AUTO_RECORD) {
                     AutoRecordScreen(appSession = appSession, navController = navController)
                 }
-                composable(Routes.DRAFTS) {
+                ledgerPage(navController, Routes.DRAFTS) {
                     DraftInboxScreen(navController = navController)
                 }
-                composable(Routes.BACKUP) {
+                ledgerPage(navController, Routes.BACKUP) {
                     BackupScreen(navController = navController)
                 }
-                composable(Routes.EXPORT) {
+                ledgerPage(navController, Routes.EXPORT) {
                     ExportScreen(navController = navController)
                 }
-                composable(Routes.APP_LOCK) {
+                ledgerPage(navController, Routes.APP_LOCK) {
                     AppLockSettingsScreen(navController = navController)
                 }
-                composable(Routes.AI) {
+                ledgerPage(navController, Routes.AI) {
                     AiSettingsScreen(navController = navController)
                 }
-                composable(Routes.ASK) {
+                ledgerPage(navController, Routes.ASK) {
                     LedgerQaScreen(navController = navController)
                 }
-                composable(Routes.CALENDAR) {
+                ledgerPage(navController, Routes.CALENDAR) {
                     CalendarScreen(navController = navController)
                 }
-                composable(
+                ledgerPage(navController, 
                     route = Routes.REPORT,
                     arguments = listOf(
                         navArgument("kind") { type = NavType.StringType },
@@ -350,16 +344,16 @@ fun AppNavHost(
                 ) {
                     PeriodReportScreen(navController = navController)
                 }
-                composable(Routes.MERCHANT_CATEGORIES) {
+                ledgerPage(navController, Routes.MERCHANT_CATEGORIES) {
                     MerchantCategoryScreen(navController = navController)
                 }
-                composable(
+                ledgerPage(navController, 
                     route = Routes.CATEGORIES,
                     arguments = listOf(navArgument("categoryType") { type = NavType.StringType }),
                 ) {
                     CategoryManageScreen(appSession = appSession, navController = navController)
                 }
-                composable(
+                ledgerPage(navController, 
                     route = Routes.TRANSACTION_NEW,
                     arguments = listOf(
                         navArgument("type") {
@@ -375,7 +369,7 @@ fun AppNavHost(
                 ) {
                     TransactionEditorScreen(appSession = appSession, navController = navController)
                 }
-                composable(
+                ledgerPage(navController, 
                     route = Routes.TRANSACTION_EDIT,
                     arguments = listOf(navArgument("transactionId") { type = NavType.StringType }),
                 ) {
@@ -435,9 +429,23 @@ private fun TopLevelPager(
         ),
         key = { TopLevelPage.entries[it].route },
     ) { page ->
+        val tabMoving = pagerState.isScrollInProgress
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .then(
+                    if (tabMoving) {
+                        Modifier.graphicsLayer {
+                            alpha = pageFadeAlpha(
+                                pagerState.currentPage,
+                                pagerState.currentPageOffsetFraction,
+                                page,
+                            )
+                        }
+                    } else {
+                        Modifier
+                    },
+                )
                 .background(MaterialTheme.colorScheme.background),
         ) {
             saveableStateHolder.SaveableStateProvider(TopLevelPage.entries[page].route) {
@@ -494,10 +502,14 @@ internal fun LedgerBottomBar(
                 },
                 colors = itemColors,
                 icon = {
+                    val createInteraction = remember { MutableInteractionSource() }
                     Surface(
                         modifier = Modifier
                             .size(48.dp)
+                            .ledgerPress(createInteraction)
                             .combinedClickable(
+                                interactionSource = createInteraction,
+                                indication = LocalIndication.current,
                                 onClick = {
                                     haptic()
                                     onCreate()
@@ -529,6 +541,17 @@ internal fun LedgerBottomBar(
                 )
             }
         }
+    }
+}
+
+private fun NavGraphBuilder.ledgerPage(
+    navController: NavHostController,
+    route: String,
+    arguments: List<NamedNavArgument> = emptyList(),
+    content: @Composable () -> Unit,
+) {
+    composable(route = route, arguments = arguments) {
+        PredictiveBackFrame(navController, it, content = content)
     }
 }
 
