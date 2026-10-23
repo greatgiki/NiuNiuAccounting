@@ -160,6 +160,9 @@ fun HomeScreen(
                     ) {
                         Text("月报")
                     }
+                    TextButton(onClick = { navController.navigate(Routes.ASK) }) {
+                        Text("问账本")
+                    }
                 }
             }
             item(key = "drafts", contentType = "drafts") {

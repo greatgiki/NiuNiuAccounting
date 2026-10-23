@@ -13,6 +13,10 @@ import com.example.localledger.domain.model.Category
 import com.example.localledger.domain.model.CategoryType
 import com.example.localledger.domain.model.SaveTransactionCommand
 import com.example.localledger.domain.model.TransactionType
+import com.example.localledger.data.ai.AiSettingsStore
+import com.example.localledger.domain.ai.LedgerEntryAssistant
+import com.example.localledger.domain.ai.UtteranceInterpretation
+import com.example.localledger.domain.ai.VoiceParseConfidence
 import com.example.localledger.domain.voice.VoiceAccountRef
 import com.example.localledger.domain.voice.VoiceCategoryRef
 import com.example.localledger.domain.voice.VoiceLedgerDraft
@@ -107,6 +111,8 @@ class TransactionEditorViewModel @Inject constructor(
     private val saveTransferUseCase: SaveTransferUseCase,
     private val deleteTransactionUseCase: DeleteTransactionUseCase,
     private val merchantCategoryBook: MerchantCategoryBook,
+    private val entryAssistant: LedgerEntryAssistant,
+    aiSettingsStore: AiSettingsStore,
     dateRangeResolver: DateRangeResolver,
 ) : ViewModel() {
     private val savedState: SavedStateHandle = savedStateHandle
@@ -129,6 +135,13 @@ class TransactionEditorViewModel @Inject constructor(
 
     private val effectChannel = Channel<EditorEffect>(Channel.BUFFERED)
     val effects = effectChannel.receiveAsFlow()
+    val aiAssistEnabled: StateFlow<Boolean> = aiSettingsStore.settings
+        .map { it.enabled }
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5_000),
+            aiSettingsStore.settings.value.enabled,
+        )
 
     private val categoryFlow = inputFlow
         .map { it.type }
@@ -317,7 +330,50 @@ class TransactionEditorViewModel @Inject constructor(
         return true
     }
 
-    suspend fun parseVoice(text: String): List<VoiceLedgerDraft> = withContext(Dispatchers.IO) {
+    suspend fun parseVoice(text: String): List<VoiceLedgerDraft> {
+        val context = voiceContext()
+        return VoiceLedgerParser.parse(
+            text,
+            context.categories,
+            context.accounts,
+            context.today,
+            context.overrides,
+        )
+    }
+
+    suspend fun localIsConfident(text: String): Boolean {
+        val context = voiceContext()
+        val local = VoiceLedgerParser.parse(
+            text,
+            context.categories,
+            context.accounts,
+            context.today,
+            context.overrides,
+        )
+        return VoiceParseConfidence.isConfident(local)
+    }
+
+    suspend fun interpretUtterance(text: String, forceAi: Boolean): UtteranceInterpretation {
+        val context = voiceContext()
+        val local = VoiceLedgerParser.parse(
+            text,
+            context.categories,
+            context.accounts,
+            context.today,
+            context.overrides,
+        )
+        return entryAssistant.interpret(
+            utterance = text,
+            local = local,
+            categories = context.categories,
+            accounts = context.accounts,
+            today = context.today,
+            force = forceAi,
+            aiEnabled = aiAssistEnabled.value,
+        )
+    }
+
+    private suspend fun voiceContext(): VoiceContext = withContext(Dispatchers.IO) {
         val categories = (voiceExpenseCategories.value.active + voiceIncomeCategories.value.active)
             .map { VoiceCategoryRef(it.id, it.name, it.type) }
         val accounts = voiceAccounts.value.active.map { VoiceAccountRef(it.id, it.name, it.type) }
@@ -328,8 +384,15 @@ class TransactionEditorViewModel @Inject constructor(
             merchantOverrides(ledgerId, TransactionType.EXPENSE) +
                 merchantOverrides(ledgerId, TransactionType.INCOME)
         }
-        VoiceLedgerParser.parse(text, categories, accounts, LocalDate.now(zoneId), overrides)
+        VoiceContext(categories, accounts, LocalDate.now(zoneId), overrides)
     }
+
+    private data class VoiceContext(
+        val categories: List<VoiceCategoryRef>,
+        val accounts: List<VoiceAccountRef>,
+        val today: LocalDate,
+        val overrides: List<VoiceMerchantOverride>,
+    )
 
     private suspend fun merchantOverrides(ledgerId: String, type: TransactionType): List<VoiceMerchantOverride> {
         return merchantCategoryBook.keys(ledgerId, type).map { (key, categoryId) ->

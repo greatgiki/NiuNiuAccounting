@@ -106,16 +106,24 @@ fun StatisticsScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp),
         ) {
-            Box(modifier = Modifier.padding(top = 8.dp)) {
-                TextButton(onClick = { showPeriodMenu = true }) {
-                    Text(state.periodText, style = MaterialTheme.typography.titleLarge)
-                    Icon(Icons.Default.ArrowDropDown, contentDescription = "选择时间范围")
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(modifier = Modifier.weight(1f)) {
+                    TextButton(onClick = { showPeriodMenu = true }) {
+                        Text(state.periodText, style = MaterialTheme.typography.titleLarge)
+                        Icon(Icons.Default.ArrowDropDown, contentDescription = "选择时间范围")
+                    }
+                    PeriodMenu(
+                        expanded = showPeriodMenu,
+                        onDismiss = { showPeriodMenu = false },
+                        onPicker = { picker = it },
+                    )
                 }
-                PeriodMenu(
-                    expanded = showPeriodMenu,
-                    onDismiss = { showPeriodMenu = false },
-                    onPicker = { picker = it },
-                )
+                TextButton(onClick = { navController.navigate(Routes.ASK) }) {
+                    Text("问账本")
+                }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 val anchor = state.period.inclusiveDates().first
