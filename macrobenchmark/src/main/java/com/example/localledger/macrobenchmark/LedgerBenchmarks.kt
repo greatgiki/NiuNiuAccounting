@@ -22,7 +22,7 @@ import org.junit.runner.RunWith
  * ```
  *
  * Needs a device or emulator (API 28+). The scroll test seeds 500 expense rows
- * and flings to both ends, so the edge settle is inside [FrameTimingMetric].
+ * and flings to both ends. Overscroll is disabled, so those frames stop at the bound.
  */
 @RunWith(AndroidJUnit4::class)
 class LedgerBenchmarks {
