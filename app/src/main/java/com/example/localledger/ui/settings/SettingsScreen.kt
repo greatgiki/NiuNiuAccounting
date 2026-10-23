@@ -17,6 +17,7 @@ import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.automirrored.outlined.TrendingDown
 import androidx.compose.material.icons.automirrored.outlined.TrendingUp
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.EventRepeat
 import androidx.compose.material.icons.outlined.FileDownload
@@ -133,6 +134,8 @@ fun SettingsScreen(
 
         SectionTitle("数据与隐私")
         LedgerCard(modifier = Modifier.fillMaxWidth()) {
+            SettingsEntry("AI 助手", Icons.Outlined.AutoAwesome) { navController.navigate(Routes.AI) }
+            LedgerHairline()
             SettingsEntry("备份与恢复", Icons.Outlined.SettingsBackupRestore) { navController.navigate(Routes.BACKUP) }
             LedgerHairline()
             SettingsEntry("导出流水", Icons.Outlined.TableChart) { navController.navigate(Routes.EXPORT) }
@@ -149,7 +152,8 @@ fun SettingsScreen(
                     "账本、账户和流水只保存在本机，不会上传。系统自带的云备份已关闭。\n" +
                         "换机或卸载前，请在「备份与恢复」把账本导出成文件；文件由你自己保管，可以设置密码。也可以按日期把流水导出为 Excel 或 CSV。\n" +
                         "刷新汇率时优先读取中国外汇交易中心公布的人民币汇率中间价，只获取公开汇率，不发送账本内容。没有网络时继续使用上次缓存的汇率。\n" +
-                        "卸载应用、清除应用数据或恢复出厂设置后，没有另行导出的账本会被删除。",
+                        "卸载应用、清除应用数据或恢复出厂设置后，没有另行导出的账本会被删除。\n" +
+                        "AI 助手默认关闭。开启后，只有解析这句话或提问时，才会把当次必要的文字发到你填写的地址。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
