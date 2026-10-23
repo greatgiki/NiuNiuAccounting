@@ -20,7 +20,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.localledger.core.storage.ThemeMode
 import com.example.localledger.domain.model.TransactionType
-import com.example.localledger.ui.component.rememberSettleOverscrollFactory
 
 /** Muted terracotta. Chinese convention: expense reads as red, kept quiet enough for body text. */
 val ExpenseColorLight = Color(0xFF8E3D32)
@@ -251,11 +250,12 @@ fun LocalLedgerTheme(
             accent = BrandGold,
         )
     }
-    val overscroll = rememberSettleOverscrollFactory()
     CompositionLocalProvider(
         LocalLedgerDarkTheme provides dark,
         LocalLedgerTones provides tones,
-        LocalOverscrollFactory provides overscroll,
+        // null removes stretch, glow, and any translate bounce from every
+        // scrollable that reads this local (lists, columns, pager, sheets).
+        LocalOverscrollFactory provides null,
     ) {
         MaterialTheme(
             colorScheme = if (dark) DarkColors else LightColors,
