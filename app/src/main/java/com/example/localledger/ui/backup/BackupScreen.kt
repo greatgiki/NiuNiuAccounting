@@ -1,5 +1,6 @@
 package com.example.localledger.ui.backup
 
+import com.example.localledger.ui.component.LedgerAlertDialog
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -15,7 +16,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -388,7 +388,7 @@ fun RestoreConfirmDialog(
     onDismiss: () -> Unit,
 ) {
     val whenText = DateTimeFormatters.dateTime(summary.createdAtEpochMillis, ZoneId.systemDefault())
-    AlertDialog(
+    LedgerAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("用这份备份覆盖当前数据？") },
         text = {
@@ -425,7 +425,7 @@ private fun PasswordDialog(
     var password by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
-    AlertDialog(
+    LedgerAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {

@@ -1,5 +1,7 @@
 package com.example.localledger.ui.voice
 
+import com.example.localledger.ui.component.LedgerDatePickerDialog
+import com.example.localledger.ui.component.LedgerAlertDialog
 import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
@@ -28,11 +30,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.Mic
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -268,7 +268,7 @@ fun VoiceBookkeeping(
     }
 
     if (phase is VoicePhase.Rationale) {
-        AlertDialog(
+        LedgerAlertDialog(
             onDismissRequest = onDismiss,
             title = { Text("语音记账") },
             text = {
@@ -652,7 +652,7 @@ private fun ReviewBody(
         val pickerState = rememberDatePickerState(
             initialSelectedDateMillis = dateDraft.date.atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli(),
         )
-        DatePickerDialog(
+        LedgerDatePickerDialog(
             onDismissRequest = { editingDate = null },
             confirmButton = {
                 TextButton(onClick = {
@@ -678,7 +678,7 @@ private fun ReviewBody(
             initialMinute = timeDraft.time.minute,
             is24Hour = true,
         )
-        AlertDialog(
+        LedgerAlertDialog(
             onDismissRequest = { editingTime = null },
             confirmButton = {
                 TextButton(onClick = {

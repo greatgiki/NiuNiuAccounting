@@ -73,7 +73,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
@@ -274,7 +274,7 @@ fun HomeScreen(
                         modifier = Modifier.fillMaxWidth().animateItem(),
                     ) {
                         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-                            state.recentTransactions.forEach { detail ->
+                            state.recentTransactions.forEachIndexed { index, detail ->
                                 val type = detail.transaction.type
                                 TransactionRowContent(
                                     title = transactionTitle(detail),
@@ -285,6 +285,7 @@ fun HomeScreen(
                                     timeMillis = detail.transaction.transactionAt,
                                     zoneId = viewModel.zoneId,
                                     iconKey = detail.categoryIconKey,
+                                    appearIndex = index,
                                     modifier = Modifier.clickable {
                                         navController.navigate(
                                             Routes.transactionEdit(detail.transaction.id),
@@ -745,13 +746,14 @@ fun BudgetProgressRow(
     modifier: Modifier = Modifier,
 ) {
     val fraction = RatioMath.fraction(line.spentMinor.coerceAtLeast(0), line.limitMinor).coerceIn(0f, 1f)
-    var started by remember { mutableStateOf(false) }
-    LaunchedEffect(line.id) { started = true }
-    val animated by animateFloatAsState(
-        targetValue = if (started) fraction else 0f,
-        animationSpec = LedgerMotion.medium(),
-        label = "budget-progress",
-    )
+    val progress = remember(line.id) { Animatable(0f) }
+    LaunchedEffect(line.id, fraction) {
+        if (LedgerMotion.animationsEnabled()) {
+            progress.animateTo(fraction, LedgerMotion.medium())
+        } else {
+            progress.snapTo(fraction)
+        }
+    }
     val barColor = amountColor(if (line.overspent) TransactionType.EXPENSE else TransactionType.INCOME)
     val track = MaterialTheme.colorScheme.surfaceVariant
     val status = if (line.overspent) {
@@ -802,7 +804,7 @@ fun BudgetProgressRow(
             drawRoundRect(color = track, cornerRadius = radius)
             drawRoundRect(
                 color = barColor,
-                size = Size(size.width * animated, size.height),
+                size = Size(size.width * progress.value, size.height),
                 cornerRadius = radius,
             )
         }
