@@ -4,6 +4,16 @@
 
 -keep class com.example.localledger.LocalLedgerApplication { *; }
 -keep class com.example.localledger.MainActivity { *; }
+-keep class com.example.localledger.capture.PaymentAccessibilityService { *; }
+-keep class com.example.localledger.capture.Hilt_PaymentAccessibilityService { *; }
+-keep class com.example.localledger.capture.PaymentAccessibilityService_GeneratedInjector { *; }
+-keep class com.example.localledger.capture.BankSmsReceiver { *; }
+-keep class com.example.localledger.capture.Hilt_BankSmsReceiver { *; }
+-keep class com.example.localledger.capture.BankSmsReceiver_GeneratedInjector { *; }
+-keep class com.example.localledger.capture.CaptureConfirmActivity { *; }
+-keep class com.example.localledger.capture.Hilt_CaptureConfirmActivity { *; }
+-keep class com.example.localledger.capture.CaptureConfirmActivity_GeneratedInjector { *; }
+-keep class * extends android.accessibilityservice.AccessibilityService { *; }
 -keep class com.example.localledger.notification.PaymentNotificationListenerService { *; }
 -keep class com.example.localledger.notification.Hilt_PaymentNotificationListenerService { *; }
 -keep class com.example.localledger.notification.PaymentNotificationListenerService_GeneratedInjector { *; }

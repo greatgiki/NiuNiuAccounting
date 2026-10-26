@@ -31,6 +31,8 @@ class ImportRulesTest {
         assertEquals("bank", AccountHintMapper.suggestAccountId("招商银行储蓄卡(1234)", BillSource.WECHAT, accounts, "wx"))
         assertEquals("ali", AccountHintMapper.suggestAccountId("余额宝", BillSource.ALIPAY, accounts, "cash"))
         assertEquals("bank", AccountHintMapper.suggestAccountId("/", BillSource.WECHAT, accounts, "bank"))
+        assertEquals("bank", AccountHintMapper.suggestAccountId("", BillSource.UNIONPAY, accounts, null))
+        assertEquals("bank", AccountHintMapper.suggestAccountId("招商银行尾号1234", BillSource.BANK, accounts, "cash"))
     }
 
     @Test

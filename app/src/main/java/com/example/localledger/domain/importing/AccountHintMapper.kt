@@ -34,6 +34,10 @@ object AccountHintMapper {
         val fallback = when (source) {
             BillSource.WECHAT -> named(active) { it.contains("微信") }
             BillSource.ALIPAY -> named(active) { it.contains("支付宝") }
+            BillSource.UNIONPAY -> named(active) { it.contains("云闪付") || it.contains("银联") }
+                ?: active.firstOrNull { it.type == AccountType.BANK_CARD || it.name.contains("银行") }?.id
+            BillSource.BANK -> active.firstOrNull { it.type == AccountType.BANK_CARD || it.name.contains("银行") }?.id
+                ?: named(active) { it.contains("储蓄") }
         } ?: active.firstOrNull()?.id
         return AccountSuggestion(fallback, false)
     }

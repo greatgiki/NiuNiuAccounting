@@ -72,7 +72,7 @@ fun oemGuide(manufacturer: String, brand: String): OemGuide? {
     return when {
         name.contains("xiaomi") || name.contains("redmi") || name.contains("poco") -> OemGuide(
             title = "小米 / 红米 / POCO（MIUI、HyperOS）",
-            steps = "打开安全中心的自启动管理，允许牛牛记账自启动。再到省电策略里把本应用设为无限制，并锁定最近任务，避免清理后台后通知监听断开。",
+            steps = "打开安全中心的自启动管理，允许牛牛记账自启动。省电策略设为无限制，并在最近任务里锁定本应用。系统的支付保护会挡住支付页面上的悬浮窗，离开该页面后会再弹出确认。",
         )
         name.contains("huawei") || name.contains("honor") -> OemGuide(
             title = "华为 / 荣耀（EMUI、HarmonyOS）",
