@@ -5,6 +5,7 @@
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">true</item>
+        <item name="android:overScrollMode">never</item>
     </style>
 
     <style name="Theme.LocalLedger.Splash" parent="Theme.SplashScreen">
@@ -14,5 +15,7 @@
         <item name="postSplashScreenTheme">@style/Theme.LocalLedger</item>
     </style>
 
-    <style name="Theme.LocalLedger.Biometric" parent="android:Theme.Translucent.NoTitleBar" />
+    <style name="Theme.LocalLedger.Biometric" parent="android:Theme.Translucent.NoTitleBar">
+        <item name="android:overScrollMode">never</item>
+    </style>
 </resources>
