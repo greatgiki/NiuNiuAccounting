@@ -133,18 +133,33 @@ private fun DraftCard(
             if (draft.likelyDuplicate) {
                 Text("可能与已有流水重复", color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.labelMedium)
             }
-            OptionLine(
-                label = "分类",
-                value = categories.firstOrNull { it.id == draft.categoryId }?.name ?: "未选择",
-                options = categories.map { it.id to it.name },
-                onSelect = { viewModel.assign(draft.id, it, draft.accountId) },
-            )
-            OptionLine(
-                label = "账户",
-                value = state.accounts.firstOrNull { it.id == draft.accountId }?.name ?: "未选择",
-                options = state.accounts.map { it.id to it.name },
-                onSelect = { viewModel.assign(draft.id, draft.categoryId, it) },
-            )
+            if (draft.type == TransactionType.TRANSFER) {
+                OptionLine(
+                    label = "转出",
+                    value = state.accounts.firstOrNull { it.id == draft.accountId }?.name ?: "未选择",
+                    options = state.accounts.map { it.id to it.name },
+                    onSelect = { viewModel.assignTransfer(draft.id, it, draft.toAccountId) },
+                )
+                OptionLine(
+                    label = "转入",
+                    value = state.accounts.firstOrNull { it.id == draft.toAccountId }?.name ?: "未选择",
+                    options = state.accounts.filter { it.id != draft.accountId }.map { it.id to it.name },
+                    onSelect = { viewModel.assignTransfer(draft.id, draft.accountId, it) },
+                )
+            } else {
+                OptionLine(
+                    label = "分类",
+                    value = categories.firstOrNull { it.id == draft.categoryId }?.name ?: "未选择",
+                    options = categories.map { it.id to it.name },
+                    onSelect = { viewModel.assign(draft.id, it, draft.accountId) },
+                )
+                OptionLine(
+                    label = "账户",
+                    value = state.accounts.firstOrNull { it.id == draft.accountId }?.name ?: "未选择",
+                    options = state.accounts.map { it.id to it.name },
+                    onSelect = { viewModel.assign(draft.id, draft.categoryId, it) },
+                )
+            }
             Row {
                 TextButton(onClick = { viewModel.confirm(draft) }) { Text("确认") }
                 TextButton(onClick = { viewModel.dismiss(draft.id) }) { Text("忽略") }
@@ -171,7 +186,7 @@ fun PendingDraftBanner(
                 if (badge.needsAmount > 0) {
                     "有 ${badge.needsAmount} 笔需补全金额，确认后才计入流水"
                 } else {
-                    "来自微信或支付宝通知，确认后才计入流水"
+                    "确认后才计入流水"
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

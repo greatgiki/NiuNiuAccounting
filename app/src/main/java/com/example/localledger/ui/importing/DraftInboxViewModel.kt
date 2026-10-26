@@ -77,11 +77,21 @@ class DraftInboxViewModel @Inject constructor(
         }
     }
 
+    fun assignTransfer(draftId: String, accountId: String?, toAccountId: String?) {
+        viewModelScope.launch {
+            draftRepository.updateTransfer(draftId, accountId, toAccountId)
+        }
+    }
+
     fun confirm(draft: PendingDraft) {
         viewModelScope.launch {
             when (draftRepository.confirm(draft.id)) {
                 is DraftConfirmResult.Confirmed -> effects.emit(DraftInboxEffect.Message("已记入流水"))
-                DraftConfirmResult.MissingAssignment -> effects.emit(DraftInboxEffect.Message("请先选择分类和账户"))
+                DraftConfirmResult.MissingAssignment -> effects.emit(
+                    DraftInboxEffect.Message(
+                        if (draft.type == TransactionType.TRANSFER) "请先选择转出和转入账户" else "请先选择分类和账户",
+                    ),
+                )
                 DraftConfirmResult.NeedsAmount -> effects.emit(DraftInboxEffect.Message("请先补全金额"))
                 DraftConfirmResult.NotPending -> effects.emit(DraftInboxEffect.Message("这条草稿已经处理过"))
             }

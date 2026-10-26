@@ -1,6 +1,7 @@
 package com.example.localledger
 
 import android.app.Application
+import com.example.localledger.capture.CaptureCoordinator
 import com.example.localledger.core.storage.BackendInitializer
 import com.example.localledger.security.AppLockController
 import com.example.localledger.ui.common.CategoryIcons
@@ -15,6 +16,7 @@ class LocalLedgerApplication : Application() {
     @Inject lateinit var editorCatalog: EditorCatalog
     @Inject lateinit var appLockController: AppLockController
     @Inject lateinit var widgetRefresher: LedgerWidgetRefresher
+    @Inject lateinit var captureCoordinator: CaptureCoordinator
 
     override fun onCreate() {
         super.onCreate()
@@ -23,5 +25,6 @@ class LocalLedgerApplication : Application() {
         editorCatalog.warm()
         CategoryIcons.prewarm()
         widgetRefresher.start()
+        captureCoordinator.warm()
     }
 }

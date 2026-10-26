@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Query
 import androidx.room.Upsert
 import com.example.localledger.data.local.entity.PendingDraftEntity
+import com.example.localledger.domain.model.TransactionType
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -124,4 +125,33 @@ interface PendingDraftDao {
         """,
     )
     suspend fun updateAssignment(id: String, categoryId: String?, accountId: String?, updatedAt: Long)
+
+    @Query(
+        """
+        UPDATE pending_drafts
+        SET account_id = :accountId, group_key = :groupKey, category_id = NULL, updated_at = :updatedAt
+        WHERE id = :id AND status = 'PENDING'
+        """,
+    )
+    suspend fun updateTransfer(id: String, accountId: String?, groupKey: String?, updatedAt: Long)
+
+    @Query(
+        """
+        UPDATE pending_drafts
+        SET type = :type,
+            category_id = :categoryId,
+            account_id = :accountId,
+            group_key = :groupKey,
+            updated_at = :updatedAt
+        WHERE id = :id AND status = 'PENDING'
+        """,
+    )
+    suspend fun updateCapture(
+        id: String,
+        type: TransactionType,
+        categoryId: String?,
+        accountId: String?,
+        groupKey: String?,
+        updatedAt: Long,
+    )
 }
