@@ -35,6 +35,20 @@ data class AppSettings(
     val autoBackupKeepCount: Int = 5,
     /** When the app lock is on, the home-screen widget replaces amounts with dots. */
     val widgetMaskAmountsWhenLocked: Boolean = true,
+    /** 云闪付页面识别。旧设置文件没有这一项时默认打开，总开关仍是 [autoRecordEnabled]。 */
+    val unionPayEnabled: Boolean = true,
+    /** 银行短信。默认关闭，需要用户单独允许。 */
+    val bankSmsEnabled: Boolean = false,
+    /** 无障碍没读到页面时，继续用原来的通知解析。 */
+    val notificationFallbackEnabled: Boolean = true,
+    /** 空字符串表示用当前账本。 */
+    val captureLedgerId: String = "",
+    val captureAccountId: String = "",
+    val captureExpenseCategoryId: String = "",
+    val captureIncomeCategoryId: String = "",
+    val captureTransferAccountId: String = "",
+    /** ledger|TYPE|merchantKey -> accountId */
+    val learnedAccountByKey: Map<String, String> = emptyMap(),
 ) {
     fun importAccountKey(ledgerId: String, source: String) = "$ledgerId|$source"
 
