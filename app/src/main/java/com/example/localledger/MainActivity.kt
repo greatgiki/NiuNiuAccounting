@@ -28,6 +28,7 @@ import com.example.localledger.ui.startup.DataLossNoticeScreen
 import com.example.localledger.ui.startup.InitializationErrorScreen
 import com.example.localledger.ui.startup.InitializationLoadingScreen
 import com.example.localledger.ui.theme.LocalLedgerTheme
+import com.example.localledger.ui.platform.disableWindowOverscroll
 import com.example.localledger.core.storage.InitializationState
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -73,6 +74,12 @@ class MainActivity : ComponentActivity() {
         setContent {
             LocalLedgerApp(appSession, pendingNavigation, appLockController)
         }
+        disableWindowOverscroll(window)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        disableWindowOverscroll(window)
     }
 
     override fun onNewIntent(intent: Intent) {

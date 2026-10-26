@@ -1,5 +1,6 @@
 package com.example.localledger.ui.theme
 
+import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -252,6 +253,9 @@ fun LocalLedgerTheme(
     CompositionLocalProvider(
         LocalLedgerDarkTheme provides dark,
         LocalLedgerTones provides tones,
+        // null removes stretch, glow, and any translate bounce from every
+        // scrollable that reads this local (lists, columns, pager, sheets).
+        LocalOverscrollFactory provides null,
     ) {
         MaterialTheme(
             colorScheme = if (dark) DarkColors else LightColors,

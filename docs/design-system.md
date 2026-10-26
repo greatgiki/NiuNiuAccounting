@@ -45,6 +45,7 @@
 ## 动效与触感
 
 - 时长：200ms（按键、淡入）与 280ms（切页、月份、图表入场）。缓动 `FastOutSlowInEasing`。
+- 滑到顶或底时内容停住：不拉伸、不位移、不发光。返回预览和分页只在各自的手势里动。
 - 顶栏分页滑动不再对整页做 alpha，避免滑动时的大透明层。
 - 键盘、保存、底部「记一笔」和确认操作使用轻触感（`KEYBOARD_TAP`）。
 - 点击目标至少 48dp。删除流水、忽略草稿后用底部条提供撤销。
@@ -57,5 +58,6 @@
 
 - 列表使用 `key` 与 `contentType`。首页、明细、编辑器状态以及流水、分类、账户模型标记 `@Immutable`。`compose_stability.conf` 将 `java.time`、不可变 `List` 和 `NavHostController` 视为稳定，避免滑动和输入时的重组风暴。明细行的点击回调按 id `remember`。键盘回调按 ViewModel `remember`，按键缩放走 `graphicsLayer`。
 - 按键缩放走 `graphicsLayer`，不触发布局。
+- 全应用 `LocalOverscrollFactory` 为 null，列表、纵滑页、分页和底部弹层都不再做边缘回弹。窗口与 ComposeView 的 `overScrollMode` 为 never，避免 HyperOS 再把整页（含顶栏）平移。
 - 保持 R8 与 `app/src/main/baselineProfiles/baseline-prof.txt`。
 - `:macrobenchmark` 测量冷启动、四页横滑、约 500 条明细滚动、打开记一笔并输入金额。说明见该模块测试类注释。

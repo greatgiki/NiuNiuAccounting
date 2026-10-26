@@ -21,7 +21,8 @@ import org.junit.runner.RunWith
  * ./gradlew :macrobenchmark:connectedBenchmarkAndroidTest
  * ```
  *
- * Needs a device or emulator (API 28+). The scroll test seeds 500 expense rows.
+ * Needs a device or emulator (API 28+). The scroll test seeds 500 expense rows
+ * and flings to both ends. Overscroll is disabled, so those frames stop at the bound.
  */
 @RunWith(AndroidJUnit4::class)
 class LedgerBenchmarks {
