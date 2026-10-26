@@ -21,6 +21,29 @@ class NotificationCapturePolicyTest {
             CaptureSettings.from(defaults),
         )
         assertEquals(CaptureGate.Disabled("自动记账未开启"), gate)
+        assertFalse(defaults.bankSmsEnabled)
+        assertTrue(defaults.unionPayEnabled)
+        assertTrue(defaults.notificationFallbackEnabled)
+        assertEquals("", defaults.captureLedgerId)
+    }
+
+    @Test
+    fun notificationFallbackCanBeTurnedOff() {
+        val gate = NotificationCapturePolicy.gate(
+            NotificationCapturePolicy.WECHAT_PACKAGE,
+            enabled().copy(notificationFallbackEnabled = false),
+        )
+        assertEquals(CaptureGate.Disabled("通知补充已关闭"), gate)
+    }
+
+    @Test
+    fun oldSettingsJsonKeepsCaptureDefaults() {
+        val decoded = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+            .decodeFromString<AppSettings>("""{"currentLedgerId":"ledger","autoRecordEnabled":true}""")
+        assertTrue(decoded.autoRecordEnabled)
+        assertFalse(decoded.bankSmsEnabled)
+        assertTrue(decoded.notificationFallbackEnabled)
+        assertTrue(decoded.learnedAccountByKey.isEmpty())
     }
 
     @Test

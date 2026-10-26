@@ -2,6 +2,8 @@
 <resources>
     <string name="app_name">牛牛记账</string>
     <string name="notification_listener_label">牛牛记账通知监听</string>
+    <string name="accessibility_service_label">牛牛记账自动记账</string>
+    <string name="accessibility_service_description">在本机识别微信、支付宝和云闪付的支付成功页与账单详情，弹出确认后才记账。不读取密码和聊天，不上传屏幕。可随时关闭。</string>
     <string name="widget_name">牛牛记账</string>
     <string name="widget_description">今日和本月的收入、支出、结余，以及记一笔</string>
     <string name="widget_add">记一笔</string>

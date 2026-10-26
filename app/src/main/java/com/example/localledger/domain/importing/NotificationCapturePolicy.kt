@@ -11,6 +11,9 @@ data class CaptureSettings(
     val alipayEnabled: Boolean,
     val keepAmountless: Boolean,
     val autoConfirm: Boolean,
+    val unionPayEnabled: Boolean = true,
+    val bankSmsEnabled: Boolean = false,
+    val notificationFallbackEnabled: Boolean = true,
 ) {
     companion object {
         fun from(settings: AppSettings?): CaptureSettings {
@@ -31,6 +34,9 @@ data class CaptureSettings(
                 alipayEnabled = settings.alipayNotificationEnabled,
                 keepAmountless = settings.keepAmountlessDrafts,
                 autoConfirm = settings.autoConfirmDrafts,
+                unionPayEnabled = settings.unionPayEnabled,
+                bankSmsEnabled = settings.bankSmsEnabled,
+                notificationFallbackEnabled = settings.notificationFallbackEnabled,
             )
         }
     }
@@ -90,6 +96,7 @@ object NotificationCapturePolicy {
         if (!settings.loaded) return CaptureGate.Disabled("设置尚未读取")
         val source = paymentSource(packageName) ?: return CaptureGate.Ignored("不是微信或支付宝")
         if (!settings.autoRecordEnabled) return CaptureGate.Disabled("自动记账未开启")
+        if (!settings.notificationFallbackEnabled) return CaptureGate.Disabled("通知补充已关闭")
         if (source == BillSource.WECHAT && !settings.wechatEnabled) return CaptureGate.Disabled("微信开关已关闭")
         if (source == BillSource.ALIPAY && !settings.alipayEnabled) return CaptureGate.Disabled("支付宝开关已关闭")
         return CaptureGate.Open(source)

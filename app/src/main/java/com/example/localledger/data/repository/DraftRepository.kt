@@ -33,6 +33,7 @@ data class PendingDraft(
     val transactionAt: Long,
     val likelyDuplicate: Boolean,
     val needsAmount: Boolean = false,
+    val toAccountId: String? = null,
 )
 
 data class NewDraft(
@@ -52,6 +53,7 @@ data class NewDraft(
     val needsAmount: Boolean = false,
     val sbnKey: String? = null,
     val groupKey: String? = null,
+    val toAccountId: String? = null,
 )
 
 sealed interface DraftConfirmResult {
@@ -107,7 +109,7 @@ class DraftRepository @Inject constructor(
                 updatedAt = now,
                 needsAmount = draft.needsAmount,
                 sbnKey = draft.sbnKey,
-                groupKey = draft.groupKey,
+                groupKey = draft.toAccountId?.let { "to:$it" } ?: draft.groupKey,
             ),
         )
         id
@@ -181,28 +183,90 @@ class DraftRepository @Inject constructor(
         val existing = database.pendingDraftDao().findById(id) ?: return@writeOperation DraftConfirmResult.NotPending
         if (existing.status != DraftStatus.PENDING) return@writeOperation DraftConfirmResult.NotPending
         if (existing.needsAmount || existing.amountMinor <= 0L) return@writeOperation DraftConfirmResult.NeedsAmount
-        val categoryId = existing.categoryId
         val accountId = existing.accountId
-        if (categoryId == null || accountId == null) return@writeOperation DraftConfirmResult.MissingAssignment
-        val transactionId = transactionRepository.saveTransaction(
-            SaveTransactionCommand(
-                ledgerId = existing.ledgerId,
-                type = existing.type,
-                amountMinor = existing.amountMinor,
-                accountId = accountId,
-                categoryId = categoryId,
-                transactionAt = existing.transactionAt,
-                note = existing.note ?: existing.counterparty,
-                origin = RecordOrigin.NOTIFICATION,
-                counterparty = existing.counterparty,
-            ),
-        )
+        val transactionId = if (existing.type == TransactionType.TRANSFER) {
+            val toAccountId = transferTarget(existing.groupKey)
+            if (accountId == null || toAccountId.isNullOrBlank() || toAccountId == accountId) {
+                return@writeOperation DraftConfirmResult.MissingAssignment
+            }
+            transactionRepository.saveTransaction(
+                SaveTransactionCommand(
+                    ledgerId = existing.ledgerId,
+                    type = existing.type,
+                    amountMinor = existing.amountMinor,
+                    accountId = accountId,
+                    toAccountId = toAccountId,
+                    transactionAt = existing.transactionAt,
+                    note = existing.note ?: existing.counterparty,
+                    origin = RecordOrigin.forDraft(existing.source, existing.notificationKey),
+                ),
+            )
+        } else {
+            val categoryId = existing.categoryId
+            if (categoryId == null || accountId == null) return@writeOperation DraftConfirmResult.MissingAssignment
+            transactionRepository.saveTransaction(
+                SaveTransactionCommand(
+                    ledgerId = existing.ledgerId,
+                    type = existing.type,
+                    amountMinor = existing.amountMinor,
+                    accountId = accountId,
+                    categoryId = categoryId,
+                    transactionAt = existing.transactionAt,
+                    note = existing.note ?: existing.counterparty,
+                    origin = RecordOrigin.forDraft(existing.source, existing.notificationKey),
+                    counterparty = existing.counterparty,
+                ),
+            )
+        }
         database.pendingDraftDao().updateStatus(id, DraftStatus.CONFIRMED, transactionId, clock.millis())
         DraftConfirmResult.Confirmed(transactionId)
     }
 
     suspend fun markMerged(id: String, transactionId: String) {
         databaseProvider.get().pendingDraftDao().updateStatus(id, DraftStatus.MERGED, transactionId, clock.millis())
+    }
+
+    suspend fun updateTransfer(id: String, accountId: String?, toAccountId: String?) {
+        val groupKey = toAccountId?.let { "to:$it" }
+        databaseProvider.get().pendingDraftDao().updateTransfer(id, accountId, groupKey, clock.millis())
+    }
+
+    suspend fun updateCapture(
+        id: String,
+        type: TransactionType,
+        categoryId: String?,
+        accountId: String?,
+        toAccountId: String?,
+    ) {
+        val database = databaseProvider.get()
+        val existing = database.pendingDraftDao().findById(id) ?: return
+        val transfer = type == TransactionType.TRANSFER
+        val groupKey = if (transfer) {
+            toAccountId?.let { "to:$it" }
+        } else {
+            existing.groupKey?.takeUnless { it.startsWith("to:") }
+        }
+        val storedCategory = if (transfer) null else categoryId
+        database.pendingDraftDao().updateCapture(
+            id = id,
+            type = type,
+            categoryId = storedCategory,
+            accountId = accountId,
+            groupKey = groupKey,
+            updatedAt = clock.millis(),
+        )
+        val changed = storedCategory != existing.categoryId
+        if (
+            MerchantMemoryPolicy.shouldRemember(
+                type = type,
+                merchant = existing.counterparty,
+                categoryId = storedCategory,
+                previousCategoryId = existing.categoryId,
+                categoryChanged = changed,
+            )
+        ) {
+            merchantCategories.remember(existing.ledgerId, type, existing.counterparty.orEmpty(), storedCategory!!)
+        }
     }
 
     private fun PendingDraftEntity.toDraft(): PendingDraft {
@@ -221,6 +285,11 @@ class DraftRepository @Inject constructor(
             transactionAt = transactionAt,
             likelyDuplicate = likelyDuplicate,
             needsAmount = needsAmount,
+            toAccountId = transferTarget(groupKey),
         )
+    }
+
+    private fun transferTarget(groupKey: String?): String? {
+        return groupKey?.takeIf { it.startsWith("to:") }?.removePrefix("to:")?.takeIf { it.isNotBlank() }
     }
 }

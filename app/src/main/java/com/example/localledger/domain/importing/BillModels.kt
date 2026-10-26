@@ -5,11 +5,15 @@ import com.example.localledger.domain.model.TransactionType
 enum class BillSource {
     WECHAT,
     ALIPAY,
+    UNIONPAY,
+    BANK,
     ;
 
     fun label(): String = when (this) {
         WECHAT -> "微信支付"
         ALIPAY -> "支付宝"
+        UNIONPAY -> "云闪付"
+        BANK -> "银行短信"
     }
 }
 
@@ -17,6 +21,14 @@ object RecordOrigin {
     const val MANUAL = "MANUAL"
     const val IMPORT = "IMPORT"
     const val NOTIFICATION = "NOTIFICATION"
+    const val ACCESSIBILITY = "ACCESSIBILITY"
+    const val SMS = "SMS"
+
+    fun forDraft(source: String, notificationKey: String?): String = when {
+        source == BillSource.BANK.name -> SMS
+        notificationKey?.startsWith("screen:") == true -> ACCESSIBILITY
+        else -> NOTIFICATION
+    }
 }
 
 object DraftStatus {

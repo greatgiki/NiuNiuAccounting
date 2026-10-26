@@ -3,7 +3,9 @@ package com.example.localledger.notification
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
+import com.example.localledger.capture.CaptureCoordinator
 import com.example.localledger.di.ApplicationScope
+import com.example.localledger.domain.capture.SmsPackages
 import com.example.localledger.domain.importing.ImportMatcher
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
@@ -18,6 +20,7 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class PaymentNotificationListenerService : NotificationListenerService() {
     @Inject lateinit var pipeline: NotificationCapturePipeline
+    @Inject lateinit var captureCoordinator: CaptureCoordinator
     @Inject
     @ApplicationScope
     lateinit var appScope: CoroutineScope
@@ -66,6 +69,10 @@ class PaymentNotificationListenerService : NotificationListenerService() {
     }
 
     private suspend fun deliver(sbn: StatusBarNotification) {
+        if (SmsPackages.isSms(sbn.packageName)) {
+            deliverSms(sbn)
+            return
+        }
         val event = NotificationEvents.from(sbn) ?: return
         try {
             capture().ingest(event)
@@ -76,10 +83,23 @@ class PaymentNotificationListenerService : NotificationListenerService() {
         }
     }
 
+    private suspend fun deliverSms(sbn: StatusBarNotification) {
+        if (!coordinator().bankSmsActive()) return
+        val text = sbn.notification?.let { NotificationTextExtractor.extract(it) }.orEmpty()
+        if (text.isBlank()) return
+        val posted = sbn.postTime.takeIf { it > 0L } ?: System.currentTimeMillis()
+        coordinator().onBankMessage(text, posted)
+    }
+
     private fun capture(): NotificationCapturePipeline {
         if (::pipeline.isInitialized) return pipeline
         Log.e(TAG, "Hilt 字段未注入，改用 EntryPoint")
         return entryPoint().capturePipeline()
+    }
+
+    private fun coordinator(): CaptureCoordinator {
+        if (::captureCoordinator.isInitialized) return captureCoordinator
+        return entryPoint().captureCoordinator()
     }
 
     private fun scope(): CoroutineScope {
@@ -100,6 +120,8 @@ class PaymentNotificationListenerService : NotificationListenerService() {
 @InstallIn(SingletonComponent::class)
 interface NotificationListenerEntryPoint {
     fun capturePipeline(): NotificationCapturePipeline
+
+    fun captureCoordinator(): CaptureCoordinator
 
     @ApplicationScope
     fun appScope(): CoroutineScope
