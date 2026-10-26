@@ -255,6 +255,7 @@ class CaptureCoordinator @Inject constructor(
             onSave = { selection -> scope.launch { finishSave(sheet, selection) } },
             onLater = { selection -> scope.launch { finishLater(sheet, selection) } },
             onDismiss = { main.post { dismiss(sheet) } },
+            onTyping = { typing -> overlay.setTyping(typing) },
         )
     }
 

@@ -83,6 +83,9 @@ data class CaptureSheet(
     val page: CapturePage,
     val type: TransactionType,
     val amountMinor: Long,
+    val amountUncertain: Boolean = false,
+    val amountChoices: List<Long> = emptyList(),
+    val amountNote: String = "",
     val merchant: String,
     val accountLabel: String,
     val accountId: String?,
@@ -104,6 +107,7 @@ data class CaptureSheet(
 
 data class CaptureSelection(
     val type: TransactionType,
+    val amountMinor: Long,
     val accountId: String?,
     val toAccountId: String?,
     val categoryId: String?,
