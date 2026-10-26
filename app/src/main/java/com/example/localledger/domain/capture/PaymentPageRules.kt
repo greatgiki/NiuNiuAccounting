@@ -19,6 +19,7 @@ object PaymentPageRules {
         "退款成功",
         "充值成功",
         "提现成功",
+        "缴费成功",
         "支付完成",
     )
 
@@ -38,6 +39,7 @@ object PaymentPageRules {
         "收款成功",
         "转账成功",
         "退款成功",
+        "缴费成功",
         "支付完成",
     )
 
@@ -64,14 +66,43 @@ object PaymentPageRules {
         "按住 说话",
     )
 
-    val amountLabels = listOf(
+    /**
+     * Money that actually moved. Prefer these over a bare number, and over
+     * [orderAmountLabels], which can be the price before a discount.
+     */
+    val paidAmountLabels = listOf(
+        "实付金额",
+        "实际支付",
+        "实付款",
+        "实付",
+        "支付金额",
+        "付款金额",
+        "充值金额",
+        "缴费金额",
+        "话费金额",
+        "收款金额",
+    )
+
+    val orderAmountLabels = listOf(
         "订单金额",
         "交易金额",
-        "付款金额",
-        "收款金额",
-        "实付金额",
-        "实付",
-        "金额",
+    )
+
+    val amountLabels = paidAmountLabels + orderAmountLabels + listOf("金额")
+
+    /**
+     * A number next to one of these is a balance, discount, or points total,
+     * not the payment. "余额宝" is an account name and is handled separately.
+     */
+    val ignoredAmountWords = listOf(
+        "余额",
+        "可用",
+        "积分",
+        "优惠",
+        "原价",
+        "抵扣",
+        "红包",
+        "立减",
     )
 
     val merchantLabels = listOf(
