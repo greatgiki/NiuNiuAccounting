@@ -32,6 +32,31 @@ object PaymentPackages {
     }
 }
 
+object BankPackages {
+    val APPS = setOf(
+        "com.icbc",
+        "com.icbc.im",
+        "com.chinamworld.main",
+        "com.android.bankabc",
+        "com.chinamworld.bocmbci",
+        "cmb.pb",
+        "com.bankcomm.Bankcomm",
+        "com.yitong.mbank.psbc",
+        "com.ecitic.bank.mobile",
+        "com.cebbank.mobile.cemb",
+        "cn.com.cmbc.newmbank",
+        "com.cib.cibmb",
+        "com.pingan.paces.ccms",
+        "cn.com.spdb.mobilebank.per",
+        "com.cgbchina.xpt",
+        "com.hxb.mobile.client",
+        "com.bankofbeijing.mobilebanking",
+        "cn.com.shbank.mper",
+    )
+
+    fun isBankApp(packageName: String?): Boolean = packageName != null && packageName in APPS
+}
+
 object SmsPackages {
     val ALL = setOf(
         "com.android.mms",

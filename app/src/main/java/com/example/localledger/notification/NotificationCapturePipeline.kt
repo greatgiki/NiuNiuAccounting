@@ -48,6 +48,7 @@ class NotificationCapturePipeline @Inject constructor(
         when (result) {
             is NotificationRecordResult.Created -> notifier.show(result)
             is NotificationRecordResult.Enriched -> notifier.showEnriched(result)
+            is NotificationRecordResult.Duplicate -> result.cancelDraftId?.let { notifier.cancel(it) }
             else -> Unit
         }
     }

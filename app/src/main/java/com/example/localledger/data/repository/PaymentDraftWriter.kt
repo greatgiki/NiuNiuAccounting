@@ -5,6 +5,8 @@ import android.util.Log
 import com.example.localledger.core.storage.SettingsStore
 import com.example.localledger.data.local.database.WalletDatabaseSource
 import com.example.localledger.data.local.entity.PendingDraftEntity
+import com.example.localledger.domain.capture.CaptureDedup
+import com.example.localledger.domain.capture.FillCandidate
 import com.example.localledger.domain.importing.AccountHintMapper
 import com.example.localledger.domain.importing.BillSource
 import com.example.localledger.domain.importing.CandidateKind
@@ -54,6 +56,8 @@ sealed interface NotificationRecordResult {
         val needsAssignment: Boolean,
         val needsAmount: Boolean,
         val patternId: String,
+        val openBill: Boolean = false,
+        val sourceKey: String = "",
     ) : NotificationRecordResult
 
     data class Enriched(
@@ -68,7 +72,7 @@ sealed interface NotificationRecordResult {
 
     data class Ignored(val reason: String) : NotificationRecordResult
     data class Disabled(val reason: String) : NotificationRecordResult
-    data class Duplicate(val reason: String) : NotificationRecordResult
+    data class Duplicate(val reason: String, val cancelDraftId: String? = null) : NotificationRecordResult
     data class Failed(val reason: String) : NotificationRecordResult
 }
 
@@ -152,12 +156,20 @@ class PaymentDraftWriter @Inject constructor(
             amountMinor = parsed.amountMinor,
             needsAmount = parsed.needsAmount,
             now = now,
+            merchant = parsed.counterparty,
         )
         val amountForMatch = parsed.amountMinor ?: 0L
         var likelyDuplicate = false
         var enrichId: String? = null
         when (val decision = NotificationCapturePolicy.dedup(incoming, existing)) {
-            DedupDecision.KeepFirst -> return NotificationRecordResult.Duplicate("重复通知，已保留第一次记录")
+            DedupDecision.KeepFirst -> {
+                val dropped = if (!parsed.needsAmount && parsed.amountMinor != null) {
+                    dismissAmountless(existing, parsed.type, parsed.counterparty, event.postedAt, now)
+                } else {
+                    null
+                }
+                return NotificationRecordResult.Duplicate("重复通知，已保留第一次记录", cancelDraftId = dropped)
+            }
             is DedupDecision.Enrich -> {
                 enrichId = decision.draftId
                 likelyDuplicate = decision.likelyDuplicate
@@ -177,6 +189,33 @@ class PaymentDraftWriter @Inject constructor(
                     origin = row.origin,
                     externalSource = row.externalSource,
                     externalId = row.externalId,
+                )
+            }
+            val hard = ImportMatcher.match(
+                source = parsed.source,
+                externalId = "",
+                type = parsed.type,
+                amountMinor = amountForMatch,
+                transactionAt = event.postedAt,
+                knownExternalIds = emptySet<ExternalKey>(),
+                candidates = transactions,
+                windowMillis = CaptureDedup.WINDOW_MILLIS,
+            )
+            if (hard.flag == DuplicateFlag.LIKELY_DUPLICATE && hard.hit != null) {
+                val pendingId = amountlessId(existing, parsed.type, parsed.counterparty, event.postedAt, now)
+                if (pendingId != null) {
+                    val filled = draftRepository.completeAmount(
+                        id = pendingId,
+                        amountMinor = amountForMatch,
+                        counterparty = parsed.counterparty,
+                        rawText = event.text,
+                        likelyDuplicate = true,
+                    )
+                    if (filled) draftRepository.markMerged(pendingId, hard.hit.candidateId)
+                }
+                return NotificationRecordResult.Duplicate(
+                    "约三分钟内已有相同金额和方向的记录",
+                    cancelDraftId = pendingId,
                 )
             }
             val match = ImportMatcher.match(
@@ -266,7 +305,47 @@ class PaymentDraftWriter @Inject constructor(
             needsAssignment = needsAssignment && !autoConfirmed,
             needsAmount = parsed.needsAmount,
             patternId = parsed.patternId,
+            openBill = parsed.maskedAmount,
+            sourceKey = event.key,
         )
+    }
+
+    private suspend fun dismissAmountless(
+        existing: List<DedupExisting>,
+        type: TransactionType,
+        merchant: String,
+        postedAt: Long,
+        now: Long,
+    ): String? {
+        return amountlessId(existing, type, merchant, postedAt, now)?.also { id ->
+            draftRepository.dismiss(id)
+        }
+    }
+
+    private fun amountlessId(
+        existing: List<DedupExisting>,
+        type: TransactionType,
+        merchant: String,
+        postedAt: Long,
+        now: Long,
+    ): String? {
+        val candidates = existing.flatMap { row ->
+            if (!row.pending || !row.needsAmount || row.type != type) {
+                emptyList()
+            } else {
+                listOf(
+                    FillCandidate(row.id, row.type, row.createdAt, merchant = row.merchant),
+                    FillCandidate(row.id, row.type, row.postTime, merchant = row.merchant),
+                )
+            }
+        }
+        return CaptureDedup.fillTarget(
+            direction = type,
+            at = now,
+            candidates = candidates,
+            alsoAt = postedAt,
+            merchant = merchant,
+        )?.id
     }
 
     private fun PendingDraftEntity.toDedup(): DedupExisting {
@@ -281,6 +360,7 @@ class PaymentDraftWriter @Inject constructor(
             needsAmount = needsAmount,
             pending = status == com.example.localledger.domain.importing.DraftStatus.PENDING,
             createdAt = createdAt,
+            merchant = counterparty.orEmpty(),
         )
     }
 
