@@ -1,6 +1,8 @@
 package com.example.localledger.domain.importing
 
 import com.example.localledger.core.storage.AppSettings
+import com.example.localledger.domain.capture.CaptureDedup
+import com.example.localledger.domain.capture.FillCandidate
 import com.example.localledger.domain.model.TransactionType
 import kotlin.math.abs
 
@@ -57,6 +59,7 @@ data class DedupIncoming(
     val amountMinor: Long?,
     val needsAmount: Boolean,
     val now: Long,
+    val merchant: String = "",
 )
 
 data class DedupExisting(
@@ -70,6 +73,7 @@ data class DedupExisting(
     val needsAmount: Boolean,
     val pending: Boolean,
     val createdAt: Long,
+    val merchant: String = "",
 )
 
 sealed interface DedupDecision {
@@ -142,6 +146,11 @@ object NotificationCapturePolicy {
             }
             if (placeholder != null) return DedupDecision.KeepFirst
         }
+        if (existing.any { row -> samePayment(row, incoming) }) return DedupDecision.KeepFirst
+        val fill = amountlessTarget(incoming, existing)
+        if (fill != null) {
+            return DedupDecision.Enrich(fill.id, likelyDuplicate(incoming, existing, fill.id))
+        }
         val amount = incoming.amountMinor
         if (!incoming.needsAmount && amount != null) {
             val burst = existing.any { row ->
@@ -154,6 +163,37 @@ object NotificationCapturePolicy {
             if (burst) return DedupDecision.KeepFirst
         }
         return DedupDecision.Insert(likelyDuplicate(incoming, existing, exceptId = null))
+    }
+
+    private fun samePayment(row: DedupExisting, incoming: DedupIncoming): Boolean {
+        if (row.needsAmount || incoming.needsAmount) return false
+        val amount = incoming.amountMinor ?: return false
+        if (row.type != incoming.type || row.amountMinor != amount || row.dedupKey == incoming.dedupKey) return false
+        val byPost = abs(incoming.postTime - row.postTime) <= CaptureDedup.WINDOW_MILLIS
+        val byCreated = abs(incoming.now - row.createdAt) <= CaptureDedup.WINDOW_MILLIS
+        return byPost || byCreated
+    }
+
+    private fun amountlessTarget(incoming: DedupIncoming, existing: List<DedupExisting>): DedupExisting? {
+        if (incoming.needsAmount || incoming.amountMinor == null) return null
+        val candidates = existing.flatMap { row ->
+            if (!row.pending || !row.needsAmount || row.type != incoming.type) {
+                emptyList()
+            } else {
+                listOf(
+                    FillCandidate(row.id, row.type, row.createdAt, merchant = row.merchant),
+                    FillCandidate(row.id, row.type, row.postTime, merchant = row.merchant),
+                )
+            }
+        }
+        val target = CaptureDedup.fillTarget(
+            direction = incoming.type,
+            at = incoming.now,
+            candidates = candidates,
+            alsoAt = incoming.postTime,
+            merchant = incoming.merchant,
+        ) ?: return null
+        return existing.firstOrNull { row -> row.id == target.id }
     }
 
     private fun samePosting(row: DedupExisting, incoming: DedupIncoming): Boolean {

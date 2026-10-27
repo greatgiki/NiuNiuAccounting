@@ -119,6 +119,15 @@ private fun DraftCard(
                 )
             }
             if (draft.needsAmount) {
+                Text(
+                    "金额没有识别到。可以打开原来的账单自动补上，也可以在这里填写或忽略。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+                if (draft.sourceKey.isNotBlank()) {
+                    TextButton(onClick = { viewModel.openBill(draft) }) { Text("打开原账单") }
+                }
                 var amountText by remember(draft.id) { mutableStateOf("") }
                 OutlinedTextField(
                     value = amountText,

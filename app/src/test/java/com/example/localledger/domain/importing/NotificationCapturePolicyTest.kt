@@ -153,6 +153,29 @@ class NotificationCapturePolicyTest {
     }
 
     @Test
+    fun sameAmountAndDirectionInsideThreeMinutesIsOnePayment() {
+        val now = 500_000L
+        val first = stored(key = "older", postTime = now - 120_000L, createdAt = now - 120_000L, amount = 1_250L)
+        val again = incoming(key = "newer", postTime = now, now = now, amount = 1_250L)
+        assertEquals(DedupDecision.KeepFirst, NotificationCapturePolicy.dedup(again, listOf(first)))
+        val income = first.copy(type = TransactionType.INCOME)
+        val decision = NotificationCapturePolicy.dedup(again, listOf(income))
+        assertTrue(decision is DedupDecision.Insert)
+    }
+
+    @Test
+    fun plaintextNotificationFillsTheOnlyMaskedDraft() {
+        val now = 80_000L
+        val masked = stored(key = "masked", postTime = now - 30_000L, createdAt = now - 30_000L, needsAmount = true, amount = 0L)
+        val plain = incoming(key = "plain", postTime = now, now = now, amount = 1_250L, merchant = "星巴克")
+        val decision = NotificationCapturePolicy.dedup(plain, listOf(masked))
+        assertEquals(DedupDecision.Enrich(masked.id, likelyDuplicate = false), decision)
+        val other = masked.copy(id = "other", dedupKey = "other-key", sbnKey = "other")
+        val ambiguous = NotificationCapturePolicy.dedup(plain, listOf(masked, other))
+        assertTrue(ambiguous is DedupDecision.Insert)
+    }
+
+    @Test
     fun freshNotificationIsInserted() {
         val decision = NotificationCapturePolicy.dedup(incoming(key = "sbn", postTime = 1_000L), emptyList())
         assertEquals(DedupDecision.Insert(likelyDuplicate = false), decision)
@@ -174,6 +197,7 @@ class NotificationCapturePolicyTest {
         amount: Long? = 1_250L,
         needsAmount: Boolean = false,
         group: String? = null,
+        merchant: String = "",
     ) = DedupIncoming(
         dedupKey = NotificationCapturePolicy.dedupKey(key, postTime),
         sbnKey = key,
@@ -183,6 +207,7 @@ class NotificationCapturePolicyTest {
         amountMinor = amount,
         needsAmount = needsAmount,
         now = now,
+        merchant = merchant,
     )
 
     private fun stored(

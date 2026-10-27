@@ -112,7 +112,6 @@ fun AutoRecordScreen(
     }
     val smsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         smsOn = granted
-        if (!granted) scope.launch { appSession.updateSettings { it.copy(bankSmsEnabled = false) } }
     }
     fun update(transform: (AppSettings) -> AppSettings) {
         scope.launch { appSession.updateSettings(transform) }
@@ -167,7 +166,7 @@ fun AutoRecordScreen(
                     Text("隐私", style = MaterialTheme.typography.titleSmall)
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "自动记账默认关闭。打开后，只在本机阅读微信、支付宝和云闪付的支付成功页、账单详情，以及你单独允许的银行短信。识别到金额后弹出确认，点「记下」才写入账本。不上传屏幕和短信，不读取支付密码，也不读取聊天内容。可以随时在这里或系统无障碍设置里关掉。",
+                        "自动记账默认关闭。打开后，只在本机阅读微信、支付宝和云闪付的支付成功页、账单详情，以及微信里打开的微信支付服务通知。银行短信和银行 App 通知要单独允许。通知里如果是「消费**元」，会先留下待确认，点按后打开原来的账单再补上金额。点「记下」才写入账本。不上传屏幕和短信，不读取支付密码。可以随时关掉。",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -210,20 +209,21 @@ fun AutoRecordScreen(
                     )
                     SettingSwitch(
                         title = "银行短信",
-                        subtitle = if (smsOn) "只解析新收到的银行入账、支出短信" else "需要短信权限。不读取短信信箱",
+                        subtitle = "新短信和银行 App 通知。解析金额、卡尾号和收支方向。不读短信信箱。",
                         checked = settings?.bankSmsEnabled == true,
                         enabled = enabled,
                         onChecked = { value ->
                             if (!value) {
                                 update { it.copy(bankSmsEnabled = false) }
-                            } else if (smsOn) {
-                                update { it.copy(bankSmsEnabled = true) }
                             } else {
-                                smsLauncher.launch(Manifest.permission.RECEIVE_SMS)
+                                if (!smsOn) smsLauncher.launch(Manifest.permission.RECEIVE_SMS)
                                 update { it.copy(bankSmsEnabled = true) }
                             }
                         },
                     )
+                    if (enabled && settings?.bankSmsEnabled == true && !smsOn) {
+                        StatusLine("短信权限未授予，银行短信暂不读取。银行 App 通知仍可用。", false)
+                    }
                 }
             }
             Spacer(Modifier.height(12.dp))
@@ -309,7 +309,7 @@ fun AutoRecordScreen(
                     Text("通知补充", style = MaterialTheme.typography.titleSmall)
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "页面暂时对不上时，仍用原来的微信、支付宝通知解析放进待确认。一分钟内相同金额会提示，不会静默记两笔。",
+                        "金额被写成「消费**元」时，先记一条待确认。点这条提醒会打开原来的账单，页面识别到金额后再确认。约三分钟内，金额和方向相同的页面、通知、服务通知和银行短信只记一笔。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -330,7 +330,7 @@ fun AutoRecordScreen(
                     )
                     SettingSwitch(
                         title = "没有金额时也生成待确认",
-                        subtitle = "通知里只有「微信支付凭证」这类文字时，先记一条需补全金额的草稿",
+                        subtitle = "「消费**元」或只有「微信支付凭证」时，先记一条待补金额的草稿",
                         checked = settings?.keepAmountlessDrafts != false,
                         enabled = enabled && settings?.notificationFallbackEnabled != false,
                         onChecked = { value -> update { it.copy(keepAmountlessDrafts = value) } },
@@ -370,7 +370,7 @@ fun AutoRecordScreen(
                     Text("做不到的地方", style = MaterialTheme.typography.titleSmall)
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "只适配简体中文界面。微信、支付宝改版后，成功页或账单详情的用词变了就会暂时认不出，通知补充仍可用。聊天、密码页和未完成的转账不会记。银行短信只认常见大陆银行的入账和支出，验证码会丢掉；有的手机只把短信交给默认短信应用，这时可以靠短信通知。已配置的 AI 助手只在商家对不上分类时用来猜分类，不发送页面内容，也不强制开启。",
+                        "只适配简体中文界面。微信、支付宝改版后，成功页或账单详情的用词变了就会暂时认不出。服务通知要打开才能读到明文金额。聊天、密码页和未完成的转账不会记。银行短信和银行 App 通知只认常见大陆银行的入账和支出，验证码会丢掉。已配置的 AI 助手只在商家对不上分类时用来猜分类，不发送页面内容。",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

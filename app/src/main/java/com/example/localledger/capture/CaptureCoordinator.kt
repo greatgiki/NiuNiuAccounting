@@ -18,6 +18,7 @@ import com.example.localledger.core.storage.ThemeMode
 import com.example.localledger.di.ApplicationScope
 import com.example.localledger.domain.ai.AiCompleter
 import com.example.localledger.domain.capture.BankSmsParser
+import com.example.localledger.domain.capture.CaptureDedup
 import com.example.localledger.domain.capture.CaptureFlags
 import com.example.localledger.domain.capture.CaptureSelection
 import com.example.localledger.domain.capture.CaptureSheet
@@ -29,6 +30,8 @@ import com.example.localledger.domain.capture.PaymentScreenParser
 import com.example.localledger.domain.capture.ScreenNode
 import com.example.localledger.domain.model.TransactionType
 import com.example.localledger.domain.time.ZoneIdProvider
+import com.example.localledger.notification.DraftNotifier
+import com.example.localledger.notification.SourceBillIntents
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -50,6 +53,7 @@ class CaptureCoordinator @Inject constructor(
     private val bookkeeper: CaptureBookkeeper,
     private val overlay: CaptureOverlay,
     private val notifier: CaptureNotifier,
+    private val draftNotifier: DraftNotifier,
     private val settingsStore: SettingsStore,
     private val completer: AiCompleter,
     private val zones: ZoneIdProvider,
@@ -211,16 +215,19 @@ class CaptureCoordinator @Inject constructor(
             val key = fingerprint(parsed)
             if (key == quietKey && now < quietUntil) return
             val showing = current
-            if (showing != null && showing.amountMinor == parsed.amountMinor && now - shownAt < 60_000L) return
-            val sheet = bookkeeper.prepare(parsed) ?: return
+            if (showing != null && samePayment(showing, parsed) && now - shownAt < CaptureDedup.WINDOW_MILLIS) return
+            val focus = SourceBillIntents.peekFocus()
+            val sheet = bookkeeper.prepare(parsed, focus) ?: return
             val themed = sheet.copy(night = night(settingsStore.peek()))
             withContext(Dispatchers.Main) {
                 val again = current
-                if (again != null && again.amountMinor == themed.amountMinor && System.currentTimeMillis() - shownAt < 60_000L) {
+                if (again != null && samePayment(again, parsed) && System.currentTimeMillis() - shownAt < CaptureDedup.WINDOW_MILLIS) {
                     return@withContext
                 }
                 reveal(themed)
             }
+            themed.duplicateDraftId?.let { draftNotifier.cancel(it) }
+            if (focus != null) SourceBillIntents.clearFocus()
             if (themed.aiEligible) classify(themed)
         }
     }
@@ -397,6 +404,10 @@ class CaptureCoordinator @Inject constructor(
                 mode == Configuration.UI_MODE_NIGHT_YES
             }
         }
+    }
+
+    private fun samePayment(sheet: CaptureSheet, parsed: ParsedCapture): Boolean {
+        return sheet.amountMinor == parsed.amountMinor && sheet.type == parsed.type
     }
 
     private fun fingerprint(parsed: ParsedCapture): String {

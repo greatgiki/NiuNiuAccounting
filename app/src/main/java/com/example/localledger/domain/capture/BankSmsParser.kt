@@ -12,11 +12,13 @@ import java.time.ZoneId
 object BankSmsParser {
     private val banks = listOf(
         "工商银行",
+        "工银",
         "农业银行",
         "中国银行",
         "建设银行",
         "交通银行",
         "邮储银行",
+        "中国邮政储蓄银行",
         "邮政储蓄",
         "招商银行",
         "浦发银行",
@@ -38,13 +40,17 @@ object BankSmsParser {
         "徽商银行",
     )
 
-    private val anchors = listOf("支出", "消费", "支付", "收入", "入账", "转入", "转出", "退款", "转账")
-    private val money = Regex("""(?:人民币|RMB|CNY)?\s*([0-9]{1,7}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)\s*元""")
-    private val tail = Regex("""尾号\s*([0-9]{4})""")
-    private val accountTail = Regex("""(?:账户|卡号|借记卡|储蓄卡)\s*([0-9]{4})""")
-    private val merchant = Regex("""商户[:：]\s*([^\s，,。]{1,30})""")
+    private val anchors = listOf("支出", "消费", "扣款", "支付", "收入", "入账", "存入", "转入", "转出", "退款", "转账")
+    private val money = Regex(
+        """(?:人民币|RMB|CNY|[¥￥])\s*([0-9]{1,7}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)|([0-9]{1,7}(?:,[0-9]{3})*\.[0-9]{1,2})\s*元|([0-9]{1,7}(?:,[0-9]{3})*)\s*元""",
+    )
+    private val tail = Regex("""尾号\s*为?\s*([0-9]{4})""")
+    private val explicitTail = Regex("""(?:末四位|后四位|卡号后四位)\s*([0-9]{4})""")
+    private val parenTail = Regex("""(?:借记卡|储蓄卡|信用卡|贷记卡|卡)\s*[（(]\s*([0-9]{4})\s*[）)]""")
+    private val accountTail = Regex("""(?:账户|卡号|借记卡|储蓄卡|信用卡|贷记卡)\s*([0-9]{4})""")
+    private val merchant = Regex("""(?:商户名称|商户|对方户名|交易对象|收款人)[:：]\s*([^\s，,。]{1,30})""")
     private val payee = Regex("""收款人[:：]\s*([^\s，,。]{1,30})""")
-    private val payTo = Regex("""向([^\s，,。]{1,30}?)支付""")
+    private val payTo = Regex("""向([^\s，,。]{1,30}?)(?:支付|付款)""")
 
     fun parse(body: String, receivedAt: Long, zone: ZoneId): ParsedCapture? {
         val text = body.trim()
@@ -56,6 +62,8 @@ object BankSmsParser {
         if (!movement) return null
         val amount = amount(text) ?: return null
         val tailNumber = tail.find(text)?.groupValues?.getOrNull(1)
+            ?: explicitTail.find(text)?.groupValues?.getOrNull(1)
+            ?: parenTail.find(text)?.groupValues?.getOrNull(1)
             ?: accountTail.find(text)?.groupValues?.getOrNull(1)
         val who = merchant.find(text)?.groupValues?.getOrNull(1)?.trim().orEmpty()
             .ifBlank { payee.find(text)?.groupValues?.getOrNull(1)?.trim().orEmpty() }
@@ -79,13 +87,24 @@ object BankSmsParser {
     private fun amount(text: String): Long? {
         val beforeBalance = text.substringBefore("余额").substringBefore("可用余额")
         val index = anchors.map { anchor -> beforeBalance.indexOf(anchor) }.filter { it >= 0 }.minOrNull() ?: return null
-        val raw = money.find(beforeBalance.substring(index))?.groupValues?.getOrNull(1) ?: return null
+        val match = money.find(beforeBalance.substring(index)) ?: return null
+        val raw = match.groupValues.drop(1).firstOrNull { group -> group.isNotBlank() } ?: return null
         return BillAmounts.parseYuanToMinor(raw)
     }
 
     private fun type(text: String): TransactionType {
-        if (listOf("转入本人", "账户互转", "本行账户").any { phrase -> phrase in text }) return TransactionType.TRANSFER
-        if (listOf("退款", "收入", "入账", "转入").any { phrase -> phrase in text }) return TransactionType.INCOME
-        return TransactionType.EXPENSE
+        if (listOf("转入本人", "账户互转", "本人账户", "本行账户").any { phrase -> phrase in text }) {
+            return TransactionType.TRANSFER
+        }
+        val expenseAt = earliest(text, listOf("支出", "消费", "扣款", "付款", "支付", "转出"))
+        val incomeAt = earliest(text, listOf("退款", "收入", "入账", "存入", "转入"))
+        return when {
+            incomeAt != null && (expenseAt == null || incomeAt < expenseAt) -> TransactionType.INCOME
+            else -> TransactionType.EXPENSE
+        }
+    }
+
+    private fun earliest(text: String, words: List<String>): Int? {
+        return words.map { word -> text.indexOf(word) }.filter { index -> index >= 0 }.minOrNull()
     }
 }
