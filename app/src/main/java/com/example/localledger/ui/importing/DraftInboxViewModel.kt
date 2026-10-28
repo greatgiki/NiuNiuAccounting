@@ -12,6 +12,7 @@ import com.example.localledger.domain.model.CategoryType
 import com.example.localledger.domain.model.TransactionType
 import com.example.localledger.domain.repository.AccountRepository
 import com.example.localledger.domain.repository.CategoryRepository
+import com.example.localledger.notification.SourceBillIntents
 import com.example.localledger.domain.time.DateRangeResolver
 import com.example.localledger.ui.AppSession
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -107,6 +108,15 @@ class DraftInboxViewModel @Inject constructor(
             }
             if (draftRepository.updateAmount(draftId, minor)) {
                 effects.emit(DraftInboxEffect.Message("金额已补全"))
+            }
+        }
+    }
+
+    fun openBill(draft: PendingDraft) {
+        viewModelScope.launch {
+            val opened = draft.sourceKey.isNotBlank() && SourceBillIntents.send(draft.sourceKey)
+            if (!opened) {
+                effects.emit(DraftInboxEffect.Message("打不开原来的账单，可以在这里补上金额"))
             }
         }
     }

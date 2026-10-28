@@ -1,10 +1,12 @@
 package com.example.localledger.notification
 
+import android.app.PendingIntent
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import com.example.localledger.capture.CaptureCoordinator
 import com.example.localledger.di.ApplicationScope
+import com.example.localledger.domain.capture.BankPackages
 import com.example.localledger.domain.capture.SmsPackages
 import com.example.localledger.domain.importing.ImportMatcher
 import dagger.hilt.EntryPoint
@@ -27,25 +29,33 @@ class PaymentNotificationListenerService : NotificationListenerService() {
 
     override fun onListenerConnected() {
         super.onListenerConnected()
+        SourceBillIntents.attach(this)
         NotificationListenerHealth.markConnected()
         val cutoff = System.currentTimeMillis() - ImportMatcher.WINDOW_MILLIS
         val active = runCatching { activeNotifications }
             .onFailure { Log.e(TAG, "读取当前通知失败", it) }
             .getOrNull()
-            .orEmpty()
-            .filter { it.postTime <= 0L || it.postTime >= cutoff }
-        launch { active.forEach { notification -> deliver(notification) } }
+        SourceBillIntents.rememberActive(active)
+        val recent = active.orEmpty().filter { it.postTime <= 0L || it.postTime >= cutoff }
+        launch { recent.forEach { notification -> deliver(notification) } }
     }
 
     override fun onListenerDisconnected() {
+        SourceBillIntents.detach(this)
         NotificationListenerHealth.markDisconnected()
         super.onListenerDisconnected()
         NotificationRebind.ensure(this)
     }
 
     override fun onDestroy() {
+        SourceBillIntents.detach(this)
         NotificationListenerHealth.markDisconnected()
         super.onDestroy()
+    }
+
+    fun findContentIntent(key: String): PendingIntent? {
+        val active = runCatching { activeNotifications }.getOrNull() ?: return null
+        return active.firstOrNull { it.key == key }?.notification?.contentIntent
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
@@ -69,9 +79,13 @@ class PaymentNotificationListenerService : NotificationListenerService() {
     }
 
     private suspend fun deliver(sbn: StatusBarNotification) {
-        if (SmsPackages.isSms(sbn.packageName)) {
+        if (SmsPackages.isSms(sbn.packageName) || BankPackages.isBankApp(sbn.packageName)) {
             deliverSms(sbn)
             return
+        }
+        sbn.notification?.contentIntent?.let { intent ->
+            val key = sbn.key
+            if (!key.isNullOrBlank()) SourceBillIntents.remember(key, intent)
         }
         val event = NotificationEvents.from(sbn) ?: return
         try {

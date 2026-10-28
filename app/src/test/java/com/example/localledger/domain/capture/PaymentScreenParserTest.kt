@@ -249,6 +249,84 @@ class PaymentScreenParserTest {
     }
 
     @Test
+    fun wechatServiceNoticeReadsPlainAmountAndMerchant() {
+        val expense = parse(
+            BillSource.WECHAT,
+            """
+            服务通知
+            微信支付
+            支付凭证
+            商户名称
+            星巴克
+            订单金额
+            ¥100.00
+            实付金额
+            ¥88.00
+            支付方式
+            零钱
+            """.trimIndent(),
+        )
+        assertEquals("wechat-service-notice", expense?.ruleId)
+        assertEquals(TransactionType.EXPENSE, expense?.type)
+        assertEquals(8_800L, expense?.amountMinor)
+        assertEquals("星巴克", expense?.merchant)
+        assertEquals("零钱", expense?.accountLabel)
+        val income = parse(
+            BillSource.WECHAT,
+            """
+            服务通知
+            微信支付
+            收款到账通知
+            收款金额
+            ¥20.00
+            付款方
+            韩梅梅
+            """.trimIndent(),
+        )
+        assertEquals(TransactionType.INCOME, income?.type)
+        assertEquals(2_000L, income?.amountMinor)
+        assertEquals("韩梅梅", income?.merchant)
+        val card = parse(
+            BillSource.WECHAT,
+            """
+            微信支付
+            支付凭证
+            星巴克
+            ¥12.50
+            """.trimIndent(),
+        )
+        assertEquals(1_250L, card?.amountMinor)
+        assertEquals("星巴克", card?.merchant)
+    }
+
+    @Test
+    fun serviceNoticeIgnoresChatAndMaskedAmount() {
+        assertNull(
+            parse(
+                BillSource.WECHAT,
+                """
+                张三
+                微信支付怎么样
+                发送
+                """.trimIndent(),
+            ),
+        )
+        assertNull(
+            parse(
+                BillSource.WECHAT,
+                """
+                服务通知
+                微信支付
+                支付凭证
+                消费金额
+                **元
+                星巴克
+                """.trimIndent(),
+            ),
+        )
+    }
+
+    @Test
     fun alipayTransitTopUpUsesThePaidAmountNotTheNewBalance() {
         val labeled = parse(
             BillSource.ALIPAY,
@@ -508,6 +586,66 @@ class BankSmsParserTest {
         assertNull(BankSmsParser.parse("【招商银行】验证码123456，请勿泄露。", receivedAt, zone))
         assertNull(BankSmsParser.parse("今晚吃饭吗", receivedAt, zone))
     }
+
+    @Test
+    fun mainlandBanksKeepTailDirectionAndIgnoreBalance() {
+        val icbc = BankSmsParser.parse(
+            "【工商银行】您尾号为8901的储蓄卡于10月26日21:08支出人民币12.50元，商户：星巴克。余额88.00元。",
+            receivedAt,
+            zone,
+        )
+        assertEquals(TransactionType.EXPENSE, icbc?.type)
+        assertEquals(1_250L, icbc?.amountMinor)
+        assertEquals("星巴克", icbc?.merchant)
+        assertEquals("工商银行尾号8901", icbc?.accountLabel)
+        val ccb = BankSmsParser.parse(
+            "【建设银行】您尾号5566的储蓄卡(5566)于10月26日21:08向美团支付人民币18.00元。",
+            receivedAt,
+            zone,
+        )
+        assertEquals(TransactionType.EXPENSE, ccb?.type)
+        assertEquals("美团", ccb?.merchant)
+        assertEquals(1_800L, ccb?.amountMinor)
+        val abc = BankSmsParser.parse(
+            "【农业银行】您尾号3344账户10月26日21:08完成交易，支出金额人民币66.00元，余额200.00元。",
+            receivedAt,
+            zone,
+        )
+        assertEquals(TransactionType.EXPENSE, abc?.type)
+        assertEquals(6_600L, abc?.amountMinor)
+        assertEquals("农业银行尾号3344", abc?.accountLabel)
+        val boc = BankSmsParser.parse(
+            "【中国银行】您尾号7788借记卡于10月26日21:08支出CNY30.00，余额CNY100.00。",
+            receivedAt,
+            zone,
+        )
+        assertEquals(TransactionType.EXPENSE, boc?.type)
+        assertEquals(3_000L, boc?.amountMinor)
+        assertEquals("中国银行尾号7788", boc?.accountLabel)
+        val cmb = BankSmsParser.parse(
+            "【招商银行】您尾号1234的储蓄卡于10月26日21:08入账人民币20.00元。",
+            receivedAt,
+            zone,
+        )
+        assertEquals(TransactionType.INCOME, cmb?.type)
+        assertEquals(2_000L, cmb?.amountMinor)
+        val bocom = BankSmsParser.parse(
+            "【交通银行】您尾号2468卡于10月26日21:08扣款人民币15.00元。",
+            receivedAt,
+            zone,
+        )
+        assertEquals(TransactionType.EXPENSE, bocom?.type)
+        assertEquals(1_500L, bocom?.amountMinor)
+        assertEquals("交通银行尾号2468", bocom?.accountLabel)
+        val psbc = BankSmsParser.parse(
+            "【邮储银行】您尾号1357账户10月26日21:08收入人民币9.90元，余额50.00元。",
+            receivedAt,
+            zone,
+        )
+        assertEquals(TransactionType.INCOME, psbc?.type)
+        assertEquals(990L, psbc?.amountMinor)
+        assertEquals("邮储银行尾号1357", psbc?.accountLabel)
+    }
 }
 
 class CaptureDedupTest {
@@ -518,7 +656,7 @@ class CaptureDedupTest {
             MoneySighting(1_250L, now - 30_000L, SightPlace.DRAFT, "draft-1"),
             MoneySighting(800L, now - 1_000L, SightPlace.TRANSACTION),
         )
-        val hit = CaptureDedup.match(1_250L, now, sightings)
+        val hit = CaptureDedup.match(1_250L, TransactionType.EXPENSE, now, sightings)
         assertEquals("draft-1", hit?.draftId)
         assertEquals(SightPlace.DRAFT, hit?.place)
     }
@@ -527,11 +665,11 @@ class CaptureDedupTest {
     fun boundaryIsInclusiveAndOlderOrDifferentAmountsPass() {
         val now = 5_000_000L
         val edge = MoneySighting(1_250L, now - CaptureDedup.WINDOW_MILLIS, SightPlace.TRANSACTION)
-        assertEquals(edge, CaptureDedup.match(1_250L, now, listOf(edge)))
+        assertEquals(edge, CaptureDedup.match(1_250L, TransactionType.EXPENSE, now, listOf(edge)))
         val older = MoneySighting(1_250L, now - CaptureDedup.WINDOW_MILLIS - 1, SightPlace.TRANSACTION)
-        assertNull(CaptureDedup.match(1_250L, now, listOf(older)))
-        assertNull(CaptureDedup.match(1_251L, now, listOf(edge)))
-        assertNull(CaptureDedup.match(0L, now, listOf(edge)))
+        assertNull(CaptureDedup.match(1_250L, TransactionType.EXPENSE, now, listOf(older)))
+        assertNull(CaptureDedup.match(1_251L, TransactionType.EXPENSE, now, listOf(edge)))
+        assertNull(CaptureDedup.match(0L, TransactionType.EXPENSE, now, listOf(edge)))
     }
 
     @Test
@@ -539,7 +677,49 @@ class CaptureDedupTest {
         val now = 90_000L
         val far = MoneySighting(500L, now - 50_000L, SightPlace.TRANSACTION, "old")
         val near = MoneySighting(500L, now - 2_000L, SightPlace.DRAFT, "new")
-        assertEquals("new", CaptureDedup.match(500L, now, listOf(far, near))?.draftId)
+        assertEquals("new", CaptureDedup.match(500L, TransactionType.EXPENSE, now, listOf(far, near))?.draftId)
+    }
+
+    @Test
+    fun threeMinuteWindowUsesDirection() {
+        assertEquals(180_000L, CaptureDedup.WINDOW_MILLIS)
+        val now = 1_000_000L
+        val expense = MoneySighting(1_250L, now - 120_000L, SightPlace.TRANSACTION, direction = TransactionType.EXPENSE)
+        val income = expense.copy(direction = TransactionType.INCOME)
+        assertEquals(expense, CaptureDedup.match(1_250L, TransactionType.EXPENSE, now, listOf(expense, income)))
+        assertNull(CaptureDedup.match(1_250L, TransactionType.INCOME, now, listOf(expense)))
+        val tooOld = expense.copy(at = now - CaptureDedup.WINDOW_MILLIS - 1)
+        assertNull(CaptureDedup.match(1_250L, TransactionType.EXPENSE, now, listOf(tooOld)))
+    }
+
+    @Test
+    fun fillTargetPrefersTheOnlyMatchingDraft() {
+        val now = 5_000_000L
+        val wechat = FillCandidate("wx", TransactionType.EXPENSE, now - 30_000L, BillSource.WECHAT, "星巴克")
+        val alipay = FillCandidate("ali", TransactionType.EXPENSE, now - 10_000L, BillSource.ALIPAY)
+        val income = FillCandidate("in", TransactionType.INCOME, now - 5_000L, BillSource.WECHAT)
+        assertEquals(
+            "wx",
+            CaptureDedup.fillTarget(TransactionType.EXPENSE, now, listOf(wechat, alipay, income), BillSource.WECHAT)?.id,
+        )
+        assertEquals(
+            "wx",
+            CaptureDedup.fillTarget(TransactionType.EXPENSE, now, listOf(wechat), BillSource.BANK)?.id,
+        )
+        val other = FillCandidate("other", TransactionType.EXPENSE, now - 20_000L, BillSource.WECHAT)
+        assertNull(CaptureDedup.fillTarget(TransactionType.EXPENSE, now, listOf(wechat, other), BillSource.WECHAT))
+        assertEquals(
+            "wx",
+            CaptureDedup.fillTarget(
+                TransactionType.EXPENSE,
+                now,
+                listOf(wechat, other),
+                BillSource.BANK,
+                merchant = "星巴克",
+            )?.id,
+        )
+        val stale = wechat.copy(at = now - CaptureDedup.WINDOW_MILLIS - 1)
+        assertNull(CaptureDedup.fillTarget(TransactionType.EXPENSE, now, listOf(stale), BillSource.WECHAT))
     }
 }
 
@@ -594,5 +774,10 @@ class CaptureSupportTest {
         assertTrue(on.allows(PaymentPackages.ALIPAY))
         assertFalse(on.allows(PaymentPackages.UNIONPAY))
         assertFalse(on.allows("com.android.mms"))
+        assertTrue(BankPackages.isBankApp("cmb.pb"))
+        assertTrue(BankPackages.isBankApp("com.icbc"))
+        assertTrue(BankPackages.isBankApp("com.yitong.mbank.psbc"))
+        assertFalse(BankPackages.isBankApp("com.tencent.mm"))
+        assertFalse(BankPackages.isBankApp("com.icbc.evil"))
     }
 }

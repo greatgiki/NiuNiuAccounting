@@ -25,6 +25,7 @@ data class ParsedNotification(
     val counterparty: String,
     val patternId: String,
     val needsAmount: Boolean,
+    val maskedAmount: Boolean = false,
 )
 
 object PaymentNotificationPatterns {
@@ -203,6 +204,16 @@ object PaymentNotificationPatterns {
 
 object PaymentNotificationParser {
     private const val AMOUNTLESS_HEAD = 240
+    private val maskBody = """[*＊∗]{2,}(?:\.[*＊∗]{1,2})?"""
+    private val maskedAt = Regex("""在\s*([^\s，,。:：*＊∗]{1,30}?)\s*消费\s*(?:[¥￥]\s*)?$maskBody""")
+    private val maskedTo = Regex("""向\s*([^\s，,。:：*＊∗]{1,30}?)\s*(?:付款|支付)\s*(?:[¥￥]\s*)?$maskBody""")
+    private val maskedMerchant = Regex("""(?:商户|商家|收款方|付款方)[:：]\s*([^\s，,。*＊∗]{1,30})""")
+    private val maskedExpense = Regex(
+        """(?:消费金额|付款金额|支付金额|实付金额|实付|消费|付款|支付|支出|扣款)\s*[:：]?\s*(?:[¥￥]\s*)?$maskBody""",
+    )
+    private val maskedIncome = Regex(
+        """(?:收款金额|收款|入账|退款)\s*[:：]?\s*(?:[¥￥]\s*)?$maskBody""",
+    )
 
     fun parse(source: BillSource, text: String): ParsedNotification? {
         val normalized = NotificationText.normalize(text)
@@ -225,6 +236,7 @@ object PaymentNotificationParser {
                 needsAmount = false,
             )
         }
+        masked(source, normalized)?.let { return it }
         val head = normalized.take(AMOUNTLESS_HEAD)
         val amountless = PaymentNotificationPatterns.amountless.firstOrNull { candidate ->
             candidate.source == source && candidate.regex.containsMatchIn(head)
@@ -237,5 +249,47 @@ object PaymentNotificationParser {
             patternId = amountless.id,
             needsAmount = true,
         )
+    }
+
+    private fun masked(source: BillSource, text: String): ParsedNotification? {
+        val expense = maskedExpense.containsMatchIn(text)
+        val income = maskedIncome.containsMatchIn(text)
+        if (!expense && !income) return null
+        val type = maskedType(text, expense, income)
+        val who = maskedAt.find(text)?.groupValues?.getOrNull(1)
+            ?: maskedTo.find(text)?.groupValues?.getOrNull(1)
+            ?: maskedMerchant.find(text)?.groupValues?.getOrNull(1)
+            ?: PaymentNotificationPatterns.counterparty(text).takeUnless { party ->
+                party.any { ch -> ch == '*' || ch == '＊' || ch == '∗' }
+            }
+        val merchant = who?.trim()?.takeUnless { party ->
+            party.isEmpty() || party == "你" || party == "您" || party == "一笔" || party.length > 30
+        }.orEmpty()
+        val app = if (source == BillSource.ALIPAY) "alipay" else "wechat"
+        return ParsedNotification(
+            source = source,
+            type = type,
+            amountMinor = null,
+            counterparty = merchant,
+            patternId = "$app-masked",
+            needsAmount = true,
+            maskedAmount = true,
+        )
+    }
+
+    private fun maskedType(text: String, expense: Boolean, income: Boolean): TransactionType {
+        if (income && !expense) return TransactionType.INCOME
+        if (expense && !income) return TransactionType.EXPENSE
+        val incomeAt = earliest(text, listOf("收款金额", "收款", "入账", "退款"))
+        val expenseAt = earliest(text, listOf("消费金额", "付款金额", "支付金额", "实付", "消费", "付款", "支付", "支出", "扣款"))
+        return if (incomeAt != null && (expenseAt == null || incomeAt < expenseAt)) {
+            TransactionType.INCOME
+        } else {
+            TransactionType.EXPENSE
+        }
+    }
+
+    private fun earliest(text: String, words: List<String>): Int? {
+        return words.map { word -> text.indexOf(word) }.filter { index -> index >= 0 }.minOrNull()
     }
 }

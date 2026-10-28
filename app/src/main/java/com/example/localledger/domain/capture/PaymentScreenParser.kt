@@ -36,7 +36,24 @@ object PaymentScreenParser {
         val lines = ScreenText.lines(root)
         if (lines.isEmpty()) return null
         val joined = lines.joinToString("\n")
-        if (isPasswordPage(joined) || isChat(lines, joined) || isPending(joined)) return null
+        if (isPasswordPage(joined)) return null
+        val recognized = if (!isChat(lines, joined) && !isPending(joined)) {
+            parseRecognized(source, lines, joined, now, zone)
+        } else {
+            null
+        }
+        if (recognized != null) return recognized
+        if (source == BillSource.WECHAT) return WeChatServiceNotice.parse(lines, now, zone)
+        return null
+    }
+
+    private fun parseRecognized(
+        source: BillSource,
+        lines: List<String>,
+        joined: String,
+        now: Long,
+        zone: ZoneId,
+    ): ParsedCapture? {
         val detail = PaymentPageRules.detailMarkers.any { marker -> marker in joined }
         val success = PaymentPageRules.successMarkers.any { marker -> marker in joined } ||
             PaymentPageRules.detailOkMarkers.any { marker -> marker in joined }

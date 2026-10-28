@@ -81,6 +81,28 @@ class PaymentNotificationParserTest {
         assertFalse(PaymentNotificationParser.parse(BillSource.WECHAT, "微信支付凭证")?.needsAmount != true)
     }
 
+    @Test
+    fun maskedAmountBecomesPendingDraftWithoutUsingStarsAsMoney() {
+        val spent = PaymentNotificationParser.parse(BillSource.WECHAT, "微信支付\n你在星巴克消费**元")
+        assertEquals(TransactionType.EXPENSE, spent?.type)
+        assertNull(spent?.amountMinor)
+        assertEquals(true, spent?.needsAmount)
+        assertEquals(true, spent?.maskedAmount)
+        assertEquals("星巴克", spent?.counterparty)
+        assertEquals("wechat-masked", spent?.patternId)
+        val paid = PaymentNotificationParser.parse(BillSource.ALIPAY, "向美团付款**.**元")
+        assertEquals(TransactionType.EXPENSE, paid?.type)
+        assertEquals("美团", paid?.counterparty)
+        assertEquals("alipay-masked", paid?.patternId)
+        val income = PaymentNotificationParser.parse(BillSource.WECHAT, "收款**元")
+        assertEquals(TransactionType.INCOME, income?.type)
+        assertEquals(true, income?.maskedAmount)
+        val real = PaymentNotificationParser.parse(BillSource.WECHAT, "已支付¥12.50\n消费**元")
+        assertEquals(1_250L, real?.amountMinor)
+        assertEquals(false, real?.needsAmount)
+        assertNull(PaymentNotificationParser.parse(BillSource.WECHAT, "张三: 晚上吃饭吗"))
+    }
+
     private data class Case(
         val source: BillSource,
         val text: String,

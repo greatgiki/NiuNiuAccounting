@@ -28,19 +28,28 @@ class DraftNotifier @Inject constructor(
         val typeLabel = if (result.type == TransactionType.INCOME) "收入" else "支出"
         val amount = if (result.needsAmount) "需补全金额" else MoneyFormatter.format(result.amountMinor)
         val who = result.counterparty.ifBlank { result.source.label() }
+        val openBill = result.openBill && result.sourceKey.isNotBlank()
         val body = when {
+            openBill -> "$typeLabel · 金额被隐藏 · $who。点按打开原来的账单，识别到金额后再确认"
             result.needsAmount -> "$typeLabel · 需补全金额 · $who，打开应用补上金额后再确认"
             result.autoConfirmed -> "已自动记一笔$typeLabel $amount · $who"
             else -> "$typeLabel $amount · $who，点按确认或修改"
         }
-        val open = pendingActivity(result.draftId.hashCode())
+        val open = if (openBill) pendingOpenBill(result.draftId, result.sourceKey) else pendingActivity(result.draftId.hashCode())
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(com.example.localledger.R.drawable.ic_stat_ledger)
-            .setContentTitle(if (result.autoConfirmed) "已自动记账" else "待确认记账")
+            .setContentTitle(if (result.autoConfirmed) "已自动记账" else if (openBill) "待补金额" else "待确认记账")
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setContentIntent(open)
             .setAutoCancel(true)
+        if (openBill) {
+            builder.addAction(
+                com.example.localledger.R.drawable.ic_stat_ledger,
+                "稍后填写",
+                pendingActivity(result.draftId.hashCode() + 1),
+            )
+        }
         if (!result.autoConfirmed && !result.needsAmount) {
             builder.addAction(com.example.localledger.R.drawable.ic_stat_ledger, "确认", pendingBroadcast(DraftActionReceiver.ACTION_CONFIRM, result.draftId))
             builder.addAction(com.example.localledger.R.drawable.ic_stat_ledger, "忽略", pendingBroadcast(DraftActionReceiver.ACTION_DISMISS, result.draftId))
@@ -138,6 +147,21 @@ class DraftNotifier @Inject constructor(
         return PendingIntent.getActivity(
             context,
             requestCode,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    private fun pendingOpenBill(draftId: String, sourceKey: String): PendingIntent {
+        val intent = Intent(context, DraftActionReceiver::class.java).apply {
+            action = DraftActionReceiver.ACTION_OPEN_BILL
+            setPackage(context.packageName)
+            putExtra(DraftActionReceiver.EXTRA_DRAFT_ID, draftId)
+            putExtra(DraftActionReceiver.EXTRA_SBN_KEY, sourceKey)
+        }
+        return PendingIntent.getBroadcast(
+            context,
+            (DraftActionReceiver.ACTION_OPEN_BILL + sourceKey).hashCode(),
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )

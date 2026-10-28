@@ -34,6 +34,7 @@ data class PendingDraft(
     val likelyDuplicate: Boolean,
     val needsAmount: Boolean = false,
     val toAccountId: String? = null,
+    val sourceKey: String = "",
 )
 
 data class NewDraft(
@@ -286,6 +287,7 @@ class DraftRepository @Inject constructor(
             likelyDuplicate = likelyDuplicate,
             needsAmount = needsAmount,
             toAccountId = transferTarget(groupKey),
+            sourceKey = sbnKey.orEmpty(),
         )
     }
 

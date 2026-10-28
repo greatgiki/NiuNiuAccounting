@@ -8,6 +8,7 @@ import com.example.localledger.domain.capture.CaptureDedup
 import com.example.localledger.domain.capture.CaptureSelection
 import com.example.localledger.domain.capture.CaptureSheet
 import com.example.localledger.domain.capture.DuplicatePlace
+import com.example.localledger.domain.capture.FillCandidate
 import com.example.localledger.domain.capture.LearnedAccount
 import com.example.localledger.domain.capture.MoneySighting
 import com.example.localledger.domain.capture.NamedChoice
@@ -51,7 +52,7 @@ class CaptureBookkeeper @Inject constructor(
     private val transactionRepository: TransactionRepository,
     private val clock: Clock,
 ) {
-    suspend fun prepare(parsed: ParsedCapture): CaptureSheet? {
+    suspend fun prepare(parsed: ParsedCapture, focusKey: String? = null): CaptureSheet? {
         val settings = settingsStore.peek() ?: return null
         if (!settings.autoRecordEnabled) return null
         if (parsed.source == BillSource.WECHAT && !settings.wechatNotificationEnabled) return null
@@ -98,11 +99,27 @@ class CaptureBookkeeper @Inject constructor(
             .takeIf { id -> id.isNotBlank() && id != accountId && accounts.any { it.id == id } }
             ?: accounts.firstOrNull { it.id != accountId }?.id
         val now = clock.millis()
-        val hit = sightings(ledgerId, now).let { rows -> CaptureDedup.match(parsed.amountMinor, now, rows) }
-        val duplicate = when (hit?.place) {
-            SightPlace.DRAFT -> DuplicatePlace.DRAFT
-            SightPlace.TRANSACTION -> DuplicatePlace.TRANSACTION
-            null -> DuplicatePlace.NONE
+        val prior = sightings(ledgerId, now)
+        val hit = CaptureDedup.match(parsed.amountMinor, parsed.type, now, prior)
+        val filledId = fillAmountless(ledgerId, parsed, now, focusKey, likelyDuplicate = hit != null)
+        if (hit?.place == SightPlace.TRANSACTION && filledId != null && hit.transactionId != null) {
+            draftRepository.markMerged(filledId, hit.transactionId)
+        }
+        val linkedDraft = when {
+            hit?.place == SightPlace.DRAFT -> hit.draftId
+            hit?.place == SightPlace.TRANSACTION -> null
+            else -> filledId
+        }
+        val duplicate = when {
+            hit?.place == SightPlace.TRANSACTION -> DuplicatePlace.TRANSACTION
+            linkedDraft != null -> DuplicatePlace.DRAFT
+            else -> DuplicatePlace.NONE
+        }
+        val duplicateText = when {
+            duplicate == DuplicatePlace.TRANSACTION -> "约三分钟内记过相同金额和方向。点「仍要记下」才会再记一笔。"
+            filledId != null && hit == null -> "已补上金额。记下会确认这条待确认，不会再记一条。"
+            duplicate == DuplicatePlace.DRAFT -> "约三分钟内已有相同金额和方向的待确认。记下会用这一笔，不会再记一条。"
+            else -> ""
         }
         return CaptureSheet(
             token = UUID.randomUUID().toString(),
@@ -123,12 +140,8 @@ class CaptureBookkeeper @Inject constructor(
             ledgerId = ledgerId,
             ruleId = parsed.ruleId,
             duplicate = duplicate,
-            duplicateDraftId = hit?.draftId,
-            duplicateText = when (duplicate) {
-                DuplicatePlace.DRAFT -> "一分钟内已有相同金额的待确认。记下会用这一笔，不会再记一条。"
-                DuplicatePlace.TRANSACTION -> "一分钟内记过相同金额。点「仍要记下」才会再记一笔。"
-                DuplicatePlace.NONE -> ""
-            },
+            duplicateDraftId = linkedDraft,
+            duplicateText = duplicateText,
             accounts = accounts.map { NamedChoice(it.id, it.name) },
             expenseCategories = expenses.map { NamedChoice(it.id, it.name) },
             incomeCategories = incomes.map { NamedChoice(it.id, it.name) },
@@ -268,16 +281,28 @@ class CaptureBookkeeper @Inject constructor(
         val now = clock.millis()
         return databaseProvider.get().transactionDao()
             .listFuzzyCandidates(sheet.ledgerId, now - CaptureDedup.WINDOW_MILLIS, now + 1)
-            .firstOrNull { it.amountMinor == amountMinor }
+            .firstOrNull { it.amountMinor == amountMinor && it.type == sheet.type }
             ?.id
     }
 
     private suspend fun retireDrafts(sheet: CaptureSheet, transactionId: String, keep: String?, amountMinor: Long) {
         val now = clock.millis()
         val dao = databaseProvider.get().pendingDraftDao()
-        dao.listCreatedSince(sheet.ledgerId, now - CaptureDedup.WINDOW_MILLIS).forEach { row ->
-            if (row.status != DraftStatus.PENDING || row.amountMinor != amountMinor || row.id == keep) return@forEach
-            dao.updateStatus(row.id, DraftStatus.MERGED, transactionId, now)
+        val rows = dao.listCreatedSince(sheet.ledgerId, now - CaptureDedup.WINDOW_MILLIS)
+        rows.forEach { row ->
+            if (row.status != DraftStatus.PENDING || row.id == keep || row.type != sheet.type) return@forEach
+            if (!row.needsAmount && row.amountMinor == amountMinor) {
+                dao.updateStatus(row.id, DraftStatus.MERGED, transactionId, now)
+            }
+        }
+        val amountless = rows.filter { row ->
+            row.status == DraftStatus.PENDING &&
+                row.needsAmount &&
+                row.type == sheet.type &&
+                row.id != keep
+        }
+        if (amountless.size == 1) {
+            dao.updateStatus(amountless.first().id, DraftStatus.MERGED, transactionId, now)
         }
     }
 
@@ -286,14 +311,69 @@ class CaptureBookkeeper @Inject constructor(
         val database = databaseProvider.get()
         val rows = ArrayList<MoneySighting>()
         database.transactionDao().listFuzzyCandidates(ledgerId, start, now + 1).forEach { row ->
-            rows += MoneySighting(row.amountMinor, row.transactionAt, SightPlace.TRANSACTION)
+            rows += MoneySighting(
+                amountMinor = row.amountMinor,
+                at = row.transactionAt,
+                place = SightPlace.TRANSACTION,
+                direction = row.type,
+                transactionId = row.id,
+            )
         }
         database.pendingDraftDao().listCreatedSince(ledgerId, start).forEach { row ->
             if (row.status != DraftStatus.PENDING || row.needsAmount || row.amountMinor <= 0L) return@forEach
-            rows += MoneySighting(row.amountMinor, row.createdAt, SightPlace.DRAFT, row.id)
-            rows += MoneySighting(row.amountMinor, row.transactionAt, SightPlace.DRAFT, row.id)
+            rows += MoneySighting(row.amountMinor, row.createdAt, SightPlace.DRAFT, row.id, row.type)
+            rows += MoneySighting(row.amountMinor, row.transactionAt, SightPlace.DRAFT, row.id, row.type)
         }
         return rows
+    }
+
+    private suspend fun fillAmountless(
+        ledgerId: String,
+        parsed: ParsedCapture,
+        now: Long,
+        focusKey: String?,
+        likelyDuplicate: Boolean,
+    ): String? {
+        val dao = databaseProvider.get().pendingDraftDao()
+        val focused = focusKey?.takeIf { it.isNotBlank() }?.let { key ->
+            dao.findBySbnKey(key).firstOrNull { row ->
+                row.ledgerId == ledgerId &&
+                    row.status == DraftStatus.PENDING &&
+                    row.needsAmount
+            }
+        }
+        val id = focused?.id ?: run {
+            val since = minOf(now, parsed.occurredAt) - CaptureDedup.WINDOW_MILLIS
+            val candidates = dao.listCreatedSince(ledgerId, since).mapNotNull { row ->
+                if (row.status != DraftStatus.PENDING || !row.needsAmount || row.type != parsed.type) {
+                    return@mapNotNull null
+                }
+                val source = runCatching { BillSource.valueOf(row.source) }.getOrNull()
+                FillCandidate(
+                    id = row.id,
+                    direction = row.type,
+                    at = row.transactionAt,
+                    source = source,
+                    merchant = row.counterparty.orEmpty(),
+                )
+            }
+            CaptureDedup.fillTarget(
+                direction = parsed.type,
+                at = now,
+                candidates = candidates,
+                source = parsed.source,
+                alsoAt = parsed.occurredAt,
+                merchant = parsed.merchant,
+            )?.id
+        } ?: return null
+        val filled = draftRepository.completeAmount(
+            id = id,
+            amountMinor = parsed.amountMinor,
+            counterparty = parsed.merchant,
+            rawText = "${parsed.ruleId} ${parsed.merchant}".trim(),
+            likelyDuplicate = likelyDuplicate,
+        )
+        return id.takeIf { filled }
     }
 
     private fun notificationKey(sheet: CaptureSheet, amountMinor: Long): String {
