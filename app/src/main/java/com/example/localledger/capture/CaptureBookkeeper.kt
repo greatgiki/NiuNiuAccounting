@@ -127,6 +127,9 @@ class CaptureBookkeeper @Inject constructor(
             page = parsed.page,
             type = parsed.type,
             amountMinor = parsed.amountMinor,
+            amountUncertain = parsed.amountUncertain,
+            amountChoices = parsed.amountChoices,
+            amountNote = parsed.amountNote,
             merchant = parsed.merchant,
             accountLabel = parsed.accountLabel,
             accountId = accountId,
@@ -152,20 +155,27 @@ class CaptureBookkeeper @Inject constructor(
 
     suspend fun save(sheet: CaptureSheet, selection: CaptureSelection): BookResult {
         return try {
-            val raced = if (sheet.duplicate != DuplicatePlace.TRANSACTION) recentTransaction(sheet) else null
+            val amount = selection.amountMinor
+            if (amount <= 0L) return later(sheet, selection)
+            val sameAmount = amount == sheet.amountMinor
+            val raced = if (sameAmount && sheet.duplicate != DuplicatePlace.TRANSACTION) {
+                recentTransaction(sheet, amount)
+            } else {
+                null
+            }
             if (raced != null) {
-                retireDrafts(sheet, raced, keep = null)
+                retireDrafts(sheet, raced, keep = null, amountMinor = amount)
                 return BookResult.Saved(raced, already = true)
             }
-            val reused = reuseDraft(sheet, selection)
+            val reused = if (sameAmount) reuseDraft(sheet, selection) else null
             if (reused != null) {
                 remember(sheet, selection)
-                retireDrafts(sheet, reused, keep = sheet.duplicateDraftId)
+                retireDrafts(sheet, reused, keep = sheet.duplicateDraftId, amountMinor = amount)
                 return BookResult.Saved(reused)
             }
             val id = transactionRepository.saveTransaction(command(sheet, selection))
             remember(sheet, selection)
-            retireDrafts(sheet, id, keep = null)
+            retireDrafts(sheet, id, keep = null, amountMinor = amount)
             BookResult.Saved(id)
         } catch (error: CancellationException) {
             throw error
@@ -178,7 +188,7 @@ class CaptureBookkeeper @Inject constructor(
     suspend fun later(sheet: CaptureSheet, selection: CaptureSelection): BookResult {
         return try {
             val existing = sheet.duplicateDraftId
-            if (existing != null) {
+            if (existing != null && selection.amountMinor == sheet.amountMinor) {
                 applySelection(existing, selection)
                 return BookResult.Drafted(existing)
             }
@@ -187,7 +197,7 @@ class CaptureBookkeeper @Inject constructor(
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
-            val key = notificationKey(sheet)
+            val key = notificationKey(sheet, selection.amountMinor)
             val found = runCatching { draftRepository.findByNotificationKey(key) }.getOrNull()
             if (found != null) {
                 BookResult.Drafted(found.id)
@@ -228,7 +238,7 @@ class CaptureBookkeeper @Inject constructor(
         return SaveTransactionCommand(
             ledgerId = sheet.ledgerId,
             type = selection.type,
-            amountMinor = sheet.amountMinor,
+            amountMinor = selection.amountMinor,
             accountId = selection.accountId.orEmpty(),
             toAccountId = if (transfer) selection.toAccountId else null,
             categoryId = if (transfer) null else selection.categoryId,
@@ -246,13 +256,13 @@ class CaptureBookkeeper @Inject constructor(
             ledgerId = sheet.ledgerId,
             source = sheet.source,
             type = selection.type,
-            amountMinor = sheet.amountMinor,
+            amountMinor = selection.amountMinor,
             counterparty = sheet.merchant,
             rawText = summary(sheet),
             categoryId = if (transfer) null else selection.categoryId,
             accountId = selection.accountId,
             transactionAt = sheet.transactionAt,
-            notificationKey = notificationKey(sheet),
+            notificationKey = notificationKey(sheet, selection.amountMinor),
             likelyDuplicate = sheet.duplicate != DuplicatePlace.NONE,
             toAccountId = if (transfer) selection.toAccountId else null,
         )
@@ -267,21 +277,21 @@ class CaptureBookkeeper @Inject constructor(
         }
     }
 
-    private suspend fun recentTransaction(sheet: CaptureSheet): String? {
+    private suspend fun recentTransaction(sheet: CaptureSheet, amountMinor: Long): String? {
         val now = clock.millis()
         return databaseProvider.get().transactionDao()
             .listFuzzyCandidates(sheet.ledgerId, now - CaptureDedup.WINDOW_MILLIS, now + 1)
-            .firstOrNull { it.amountMinor == sheet.amountMinor && it.type == sheet.type }
+            .firstOrNull { it.amountMinor == amountMinor && it.type == sheet.type }
             ?.id
     }
 
-    private suspend fun retireDrafts(sheet: CaptureSheet, transactionId: String, keep: String?) {
+    private suspend fun retireDrafts(sheet: CaptureSheet, transactionId: String, keep: String?, amountMinor: Long) {
         val now = clock.millis()
         val dao = databaseProvider.get().pendingDraftDao()
         val rows = dao.listCreatedSince(sheet.ledgerId, now - CaptureDedup.WINDOW_MILLIS)
         rows.forEach { row ->
             if (row.status != DraftStatus.PENDING || row.id == keep || row.type != sheet.type) return@forEach
-            if (!row.needsAmount && row.amountMinor == sheet.amountMinor) {
+            if (!row.needsAmount && row.amountMinor == amountMinor) {
                 dao.updateStatus(row.id, DraftStatus.MERGED, transactionId, now)
             }
         }
@@ -366,9 +376,9 @@ class CaptureBookkeeper @Inject constructor(
         return id.takeIf { filled }
     }
 
-    private fun notificationKey(sheet: CaptureSheet): String {
+    private fun notificationKey(sheet: CaptureSheet, amountMinor: Long): String {
         val minute = sheet.transactionAt / 60_000L
-        return "screen:${sheet.source.name}:${sheet.amountMinor}:$minute:${MerchantKey.normalize(sheet.merchant)}"
+        return "screen:${sheet.source.name}:$amountMinor:$minute:${MerchantKey.normalize(sheet.merchant)}"
     }
 
     private fun summary(sheet: CaptureSheet): String {

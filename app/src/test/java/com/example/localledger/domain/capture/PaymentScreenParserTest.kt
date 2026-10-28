@@ -326,6 +326,209 @@ class PaymentScreenParserTest {
         )
     }
 
+    @Test
+    fun alipayTransitTopUpUsesThePaidAmountNotTheNewBalance() {
+        val labeled = parse(
+            BillSource.ALIPAY,
+            """
+            支付成功
+            公交卡充值
+            卡内余额
+            ¥299.00
+            充值金额
+            ¥200.00
+            付款方式
+            余额宝
+            """.trimIndent(),
+        )
+        assertEquals(20_000L, labeled?.amountMinor)
+        assertEquals(TransactionType.EXPENSE, labeled?.type)
+        assertEquals("公交卡充值", labeled?.merchant)
+        assertEquals("余额宝", labeled?.accountLabel)
+        assertFalse(labeled?.amountUncertain == true)
+
+        val balanceFirst = parse(
+            BillSource.ALIPAY,
+            """
+            支付成功
+            卡内余额
+            ¥299.00
+            充值金额
+            ¥200.00
+            """.trimIndent(),
+        )
+        assertEquals(20_000L, balanceFirst?.amountMinor)
+        assertFalse(balanceFirst?.amountUncertain == true)
+
+        val prominent = parse(
+            BillSource.ALIPAY,
+            """
+            充值成功
+            -¥200.00
+            公交卡充值
+            卡内余额
+            ¥299.00
+            """.trimIndent(),
+        )
+        assertEquals(20_000L, prominent?.amountMinor)
+        assertFalse(prominent?.amountUncertain == true)
+
+        val inline = parse(
+            BillSource.ALIPAY,
+            """
+            支付成功
+            充值金额：200.00元
+            卡内余额：299.00元
+            公交卡
+            """.trimIndent(),
+        )
+        assertEquals(20_000L, inline?.amountMinor)
+        assertEquals("公交卡", inline?.merchant)
+    }
+
+    @Test
+    fun phoneBillUtilityWalletAndDiscountPagesIgnoreBalance() {
+        val phone = parse(
+            BillSource.ALIPAY,
+            """
+            支付成功
+            手机话费充值
+            充值金额
+            100.00
+            话费余额
+            36.50
+            """.trimIndent(),
+        )
+        assertEquals(10_000L, phone?.amountMinor)
+        assertEquals("手机话费充值", phone?.merchant)
+        assertFalse(phone?.amountUncertain == true)
+
+        val utility = parse(
+            BillSource.ALIPAY,
+            """
+            缴费成功
+            电费
+            缴费金额
+            86.40
+            账户余额
+            12.30
+            """.trimIndent(),
+        )
+        assertEquals(TransactionType.EXPENSE, utility?.type)
+        assertEquals(8_640L, utility?.amountMinor)
+        assertEquals("电费", utility?.merchant)
+        assertFalse(utility?.amountUncertain == true)
+
+        val yuebao = parse(
+            BillSource.ALIPAY,
+            """
+            支付成功
+            -¥12.50
+            星巴克
+            付款方式
+            余额宝
+            可用余额
+            ¥5000.00
+            """.trimIndent(),
+        )
+        assertEquals(1_250L, yuebao?.amountMinor)
+        assertEquals("星巴克", yuebao?.merchant)
+        assertEquals("余额宝", yuebao?.accountLabel)
+        assertFalse(yuebao?.amountUncertain == true)
+
+        val lingqiantong = parse(
+            BillSource.WECHAT,
+            """
+            支付成功
+            -¥6.60
+            美团
+            支付方式
+            零钱通
+            零钱通余额
+            ¥88.00
+            """.trimIndent(),
+        )
+        assertEquals(660L, lingqiantong?.amountMinor)
+        assertEquals("美团", lingqiantong?.merchant)
+        assertEquals("零钱通", lingqiantong?.accountLabel)
+
+        val discount = parse(
+            BillSource.ALIPAY,
+            """
+            付款成功
+            -¥18.00
+            星巴克
+            订单金额
+            ¥20.00
+            优惠
+            ¥2.00
+            """.trimIndent(),
+        )
+        assertEquals(1_800L, discount?.amountMinor)
+        assertTrue(discount?.amountUncertain == true)
+        assertTrue(discount?.amountChoices?.contains(2_000L) == true)
+        assertFalse(discount?.amountChoices?.contains(200L) == true)
+
+        val original = parse(
+            BillSource.WECHAT,
+            """
+            付款成功
+            -¥15.00
+            优惠前原价
+            ¥18.00
+            积分
+            200
+            星巴克
+            """.trimIndent(),
+        )
+        assertEquals(1_500L, original?.amountMinor)
+        assertFalse(original?.amountUncertain == true)
+
+        val paidLabel = parse(
+            BillSource.UNIONPAY,
+            """
+            交易成功
+            订单金额
+            ¥20.00
+            优惠
+            ¥2.00
+            实付金额
+            ¥18.00
+            地铁
+            """.trimIndent(),
+        )
+        assertEquals(1_800L, paidLabel?.amountMinor)
+        assertFalse(paidLabel?.amountUncertain == true)
+    }
+
+    @Test
+    fun ambiguousAmountsStayUncertainAndBalanceOnlyIsNotSilent() {
+        val ambiguous = parse(
+            BillSource.WECHAT,
+            """
+            支付成功
+            ¥12.00
+            ¥30.00
+            星巴克
+            """.trimIndent(),
+        )
+        assertEquals(1_200L, ambiguous?.amountMinor)
+        assertTrue(ambiguous?.amountUncertain == true)
+        assertEquals(listOf(1_200L, 3_000L), ambiguous?.amountChoices)
+
+        val balanceOnly = parse(
+            BillSource.ALIPAY,
+            """
+            支付成功
+            卡内余额
+            ¥299.00
+            """.trimIndent(),
+        )
+        assertEquals(29_900L, balanceOnly?.amountMinor)
+        assertTrue(balanceOnly?.amountUncertain == true)
+        assertTrue(balanceOnly?.amountNote?.contains("余额") == true)
+    }
+
     private fun parse(source: BillSource, dump: String) =
         PaymentScreenParser.parse(source, ScreenDump.parse(dump), now, zone)
 }

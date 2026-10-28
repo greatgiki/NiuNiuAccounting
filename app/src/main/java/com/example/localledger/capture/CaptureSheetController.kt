@@ -7,6 +7,11 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.View
+import android.text.Editable
+import android.text.InputType
+import android.text.TextWatcher
+import android.view.inputmethod.InputMethodManager
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -15,6 +20,8 @@ import com.example.localledger.domain.capture.CaptureSelection
 import com.example.localledger.domain.capture.CaptureSheet
 import com.example.localledger.domain.capture.DuplicatePlace
 import com.example.localledger.domain.capture.NamedChoice
+import com.example.localledger.domain.capture.PaymentAmounts
+import com.example.localledger.domain.importing.BillAmounts
 import com.example.localledger.domain.model.TransactionType
 import com.example.localledger.domain.money.MinorText
 import java.time.Instant
@@ -27,9 +34,14 @@ internal class CaptureSheetController(
     private val onSave: (CaptureSelection) -> Unit,
     private val onLater: (CaptureSelection) -> Unit,
     private val onDismiss: () -> Unit,
+    private val onTyping: (Boolean) -> Unit = {},
 ) {
     private var sheet = initial
     private var type = initial.type
+    private var amountMinor = initial.amountMinor
+    private var editingAmount = false
+    private var amountDraft = PaymentAmounts.yuanText(initial.amountMinor)
+    private var amountError = false
     private var accountId = initial.accountId
     private var toAccountId = initial.toAccountId
     private var categoryId = initial.categoryId
@@ -62,6 +74,10 @@ internal class CaptureSheetController(
         view.removeAllViews()
         view.addView(title())
         view.addView(amount())
+        if (editingAmount) view.addView(amountEditor())
+        if (sheet.amountUncertain && sheet.amountChoices.size > 1) view.addView(choiceChips())
+        if (sheet.amountNote.isNotBlank()) view.addView(note(sheet.amountNote, palette.warn))
+        if (amountError) view.addView(note("请输入大于 0 的金额，例如 200.00", palette.warn))
         if (sheet.duplicateText.isNotBlank()) view.addView(note(sheet.duplicateText, palette.warn))
         val who = sheet.merchant.ifBlank { sheet.source.label() }
         view.addView(body(who, 16f, palette.ink))
@@ -112,8 +128,10 @@ internal class CaptureSheetController(
             TransactionType.EXPENSE -> "−"
             TransactionType.TRANSFER -> ""
         }
+        val shown = currentAmount() ?: amountMinor
         return TextView(context).apply {
-            text = sign + MinorText.format(sheet.amountMinor)
+            text = sign + MinorText.format(shown)
+            contentDescription = "金额 ${PaymentAmounts.yuanText(shown)}，点按修改"
             setTextColor(when (type) {
                 TransactionType.INCOME -> palette.income
                 TransactionType.EXPENSE -> palette.expense
@@ -124,7 +142,86 @@ internal class CaptureSheetController(
             setFontFeatureSettings("tnum")
             letterSpacing = -0.03f
             setPadding(0, dp(4), 0, dp(4))
+            if (sheet.amountUncertain) {
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(12).toFloat()
+                    setColor(palette.page)
+                }
+            }
+            setOnClickListener {
+                editingAmount = !editingAmount
+                amountError = false
+                if (!editingAmount) {
+                    commitDraft()
+                    onTyping(false)
+                }
+                rebuild()
+            }
         }
+    }
+
+    private fun amountEditor(): EditText {
+        return EditText(context).apply {
+            setText(amountDraft)
+            setSelection(text.length)
+            hint = "金额"
+            setTextColor(palette.ink)
+            setHintTextColor(palette.muted)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 28f)
+            setFontFeatureSettings("tnum")
+            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+            importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
+            background = GradientDrawable().apply {
+                cornerRadius = dp(12).toFloat()
+                setColor(palette.page)
+            }
+            minHeight = dp(48)
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+                override fun afterTextChanged(s: Editable?) {
+                    amountDraft = s?.toString().orEmpty()
+                }
+            })
+            post {
+                onTyping(true)
+                requestFocus()
+                val imm = context.getSystemService(InputMethodManager::class.java)
+                imm?.showSoftInput(this, InputMethodManager.SHOW_IMPLICIT)
+            }
+        }
+    }
+
+    private fun choiceChips(): LinearLayout {
+        val row = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, dp(4), 0, dp(4))
+        }
+        sheet.amountChoices.distinct().take(4).forEach { choice ->
+            row.addView(
+                chip(PaymentAmounts.yuanText(choice), choice == amountMinor && !editingAmount) {
+                    amountMinor = choice
+                    amountDraft = PaymentAmounts.yuanText(choice)
+                    editingAmount = false
+                    amountError = false
+                    onTyping(false)
+                    rebuild()
+                },
+                LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginEnd = dp(8) },
+            )
+        }
+        return row
+    }
+
+    private fun commitDraft() {
+        val parsed = BillAmounts.parseYuanToMinor(amountDraft.replace('。', '.').replace('．', '.'))
+        if (parsed != null) amountMinor = parsed
+    }
+
+    private fun currentAmount(): Long? {
+        val raw = if (editingAmount) amountDraft else PaymentAmounts.yuanText(amountMinor)
+        return BillAmounts.parseYuanToMinor(raw.replace('。', '.').replace('．', '.'))
     }
 
     private fun typeRow(): LinearLayout {
@@ -199,9 +296,25 @@ internal class CaptureSheetController(
         }
         val primary = sheet.duplicate == DuplicatePlace.TRANSACTION
         row.addView(textButton("忽略") { onDismiss() })
-        row.addView(textButton("稍后") { onLater(selection()) })
+        row.addView(textButton("稍后") {
+            if (currentAmount() == null) {
+                amountError = true
+                rebuild()
+                return@textButton
+            }
+            commitDraft()
+            onTyping(false)
+            onLater(selection())
+        })
         row.addView(fillButton(if (primary) "仍要记下" else "记下", enabled = canSave()) {
+            if (currentAmount() == null) {
+                amountError = true
+                rebuild()
+                return@fillButton
+            }
+            commitDraft()
             it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            onTyping(false)
             onSave(selection())
         })
         return row
@@ -209,6 +322,7 @@ internal class CaptureSheetController(
 
     private fun selection() = CaptureSelection(
         type = type,
+        amountMinor = currentAmount() ?: amountMinor,
         accountId = accountId,
         toAccountId = toAccountId,
         categoryId = categoryId,
