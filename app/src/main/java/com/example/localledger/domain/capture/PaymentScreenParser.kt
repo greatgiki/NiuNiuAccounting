@@ -1,6 +1,5 @@
 package com.example.localledger.domain.capture
 
-import com.example.localledger.domain.importing.BillAmounts
 import com.example.localledger.domain.importing.BillSource
 import com.example.localledger.domain.model.TransactionType
 import java.time.ZoneId
@@ -16,6 +15,9 @@ data class ParsedCapture(
     val accountLabel: String,
     val occurredAt: Long,
     val ruleId: String,
+    val amountUncertain: Boolean = false,
+    val amountChoices: List<Long> = emptyList(),
+    val amountNote: String = "",
 )
 
 object PaymentScreenParser {
@@ -58,7 +60,7 @@ object PaymentScreenParser {
         if (!detail && !success) return null
         if (detail && !acceptDetail(joined)) return null
         if (!detail && PaymentPageRules.successMarkers.none { marker -> marker in joined }) return null
-        val amount = pickAmount(lines) ?: return null
+        val amount = PaymentAmounts.read(lines) ?: return null
         val page = if (detail) CapturePage.DETAIL else CapturePage.SUCCESS
         val merchant = merchant(lines).orEmpty()
         val account = labeled(lines, PaymentPageRules.accountLabels).orEmpty()
@@ -68,11 +70,14 @@ object PaymentScreenParser {
             source = source,
             page = page,
             type = classify(joined),
-            amountMinor = amount,
+            amountMinor = amount.amountMinor,
             merchant = merchant,
             accountLabel = account,
             occurredAt = occurredAt,
             ruleId = ruleId(source, page),
+            amountUncertain = amount.uncertain,
+            amountChoices = amount.choices,
+            amountNote = amount.note,
         )
     }
 
@@ -131,24 +136,6 @@ object PaymentScreenParser {
         return TransactionType.EXPENSE
     }
 
-    private fun pickAmount(lines: List<String>): Long? {
-        for (label in PaymentPageRules.amountLabels) {
-            val value = labeled(lines, listOf(label)) ?: continue
-            if ("优惠" in value) continue
-            BillAmounts.parseYuanToMinor(value)?.let { return it }
-        }
-        for (line in lines) {
-            if ("优惠" in line || "时间" in line || "年" in line || "月" in line) continue
-            val compact = line.replace(" ", "").replace("\u00A0", "")
-            val raw = decimalLine.matchEntire(compact)?.groupValues?.getOrNull(1)
-                ?: currencyLine.matchEntire(compact)?.groupValues?.getOrNull(1)
-                ?: yuanLine.matchEntire(compact)?.groupValues?.getOrNull(1)
-                ?: continue
-            BillAmounts.parseYuanToMinor(raw)?.let { return it }
-        }
-        return null
-    }
-
     private fun merchant(lines: List<String>): String? {
         labeled(lines, PaymentPageRules.merchantLabels)?.takeUnless { isNoise(it) }?.let { return it }
         return lines.firstOrNull { line -> !isNoise(line) }
@@ -186,6 +173,7 @@ object PaymentScreenParser {
         if (PaymentPageRules.timeLabels.any { label -> text == label || text.startsWith(label) }) return true
         if (PaymentPageRules.merchantLabels.any { label -> text == label }) return true
         if (text in PaymentPageRules.statusWords) return true
+        if (PaymentAmounts.isSkippableCaption(text)) return true
         val compact = text.replace(" ", "")
         if (decimalLine.matches(compact) || currencyLine.matches(compact) || yuanLine.matches(compact)) return true
         if (text.any { it.isDigit() } && text.count { it.isDigit() } * 2 >= text.length) return true

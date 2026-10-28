@@ -59,6 +59,26 @@ class CaptureOverlay @Inject constructor(
         }
     }
 
+    fun setTyping(enabled: Boolean) {
+        val view = shown ?: return
+        val params = view.layoutParams as? WindowManager.LayoutParams ?: return
+        val base = WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+            WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
+        params.flags = if (enabled) base else base or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+        params.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN or
+            if (enabled) {
+                WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE
+            } else {
+                WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN
+            }
+        try {
+            windowManager.updateViewLayout(view, params)
+        } catch (_: Exception) {
+            // The sheet is hosted by an activity, which can take focus on its own.
+        }
+    }
+
     fun hide() {
         val view = shown ?: return
         shown = null
