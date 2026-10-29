@@ -80,7 +80,7 @@ files/
 
 `data/` 保存数据库及 SQLite 的 WAL/SHM 运行文件；`config/` 保存非账本配置，例如当前账本 ID、最近一次使用的账户 ID、主题设置。
 
-App 申请 `INTERNET`，只用于拉取汇率。不申请全盘文件访问或媒体读取权限。
+App 申请 `INTERNET`，用于拉取汇率；AI 助手打开后也用于用户填写的接口。不申请全盘文件访问或媒体读取权限。当前 Room schema 为 v6，应用版本 0.1（`versionCode` 1）。
 
 ### 3.2 初始化流程
 
@@ -215,6 +215,9 @@ categories(ledger_id, type, is_archived, sort_order)
 - `recurring_occurrences`：规则和发生日唯一，记录已生成的流水 id。删除规则时级联删除发生记录，不自动删除流水。
 - `exchange_rate_snapshots`：每个本位币一行当前汇率。
 - `exchange_rate_history`：主键为本位币和发布时间，保留历次刷新，供按流水日期重算。Schema v3 从 v2 迁入时，把当时的当前汇率复制进历史表。
+- `pending_drafts`：v4 起的待确认。v5 增加 `needs_amount`、`sbn_key`、`group_key`，用来承接隐藏金额的通知。
+- `merchant_category_rules`：v6 起按账本、商家和收支方向记住分类。同一版给流水增加 `counterparty`。
+- 流水的 `external_source`、`external_id` 和 `origin` 自 v4 起，供账单文件导入去重。
 
 汇率主来源是中国外汇交易中心人民币中间价（`ccpr.json`，失败时同站 `CcprHisNew`）。未公布的币种依次用 jsDelivr currency-api、open.er-api、Frankfurter 补齐。报价先统一成「1 人民币兑多少外币」，再交叉到账本本位币。
 
@@ -461,7 +464,7 @@ SQLite 的 UTC 时间戳不能直接可靠地按用户本地日历聚合。MVP �
 - 每个 Migration 需要从旧版本真实数据库文件升级的测试。
 - 初始预置数据只在数据库为空时插入，且使用固定或可识别的 UUID，避免升级或重启时重复插入。
 - 外键约束应开启，并优先使用 `RESTRICT` 防止误删仍被历史流水引用的账户、分类或账本。
-- 账户、分类的 `ledger_id` 由 `BEFORE UPDATE OF ledger_id` 触发器保护：新旧值不同时 `RAISE(ABORT)`，在数据库层强制账本归属不可变。触发器在每次打开数据库时安装，不改变 Room 表结构，因此仍为 Schema v1。
+- 账户、分类的 `ledger_id` 由 `BEFORE UPDATE OF ledger_id` 触发器保护：新旧值不同时 `RAISE(ABORT)`，在数据库层强制账本归属不可变。触发器在每次打开数据库时安装，不单独占用 schema 版本。当前 Room schema 是 v6，迁移为 `MIGRATION_1_2` 到 `MIGRATION_5_6`。
 - 每个写入异常必须向上层返回可展示的领域错误，不允许吞掉 SQLite 异常。
 
 ## 11. 后端测试
@@ -495,7 +498,7 @@ SQLite 的 UTC 时间戳不能直接可靠地按用户本地日历聚合。MVP �
 
 ## 12. 后端验收标准
 
-- 全部账本数据和配置只写入 App 本机专属目录。网络只用于刷新汇率，离线时使用上次缓存。
+- 全部账本数据和配置只写入 App 本机专属目录。汇率刷新失败时使用上次缓存。AI 助手默认关闭；打开后才会把当次必要的文字发到用户自己的接口。
 - 首次启动可以可靠创建目录、数据库、默认账本、预置账户和预置分类。
 - 所有金额使用 `Long` 分单位，长期累计不存在浮点误差。
 - 收入、支出、转账、编辑、硬删除后，明细、统计和当前账户余额保持一致。

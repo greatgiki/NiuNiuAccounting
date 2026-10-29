@@ -4,7 +4,7 @@
 
 本文档描述当前工程中已经实现、供前端和 ViewModel 调用的 Kotlin 后端接口。
 
-本文中的“接口”是 App 进程内的 Kotlin API，不是 HTTP、REST 或 RPC 接口。账本读写都在本机；唯一的出站请求是汇率刷新（中国外汇交易中心人民币中间价，以及补齐缺币种的备用源）。调用链如下：
+本文中的“接口”是 App 进程内的 Kotlin API，不是 HTTP、REST 或 RPC 接口。账本读写都在本机。出站请求只有两类：汇率刷新（中国外汇交易中心人民币中间价，以及补齐缺币种的备用源）；以及用户打开 AI 助手后，发到其自己填写的 OpenAI 或 Anthropic 兼容地址。当前应用版本 0.1（`versionCode` 1）。自动记账、备份和 AI 的行为见 `README.md` 与 `docs/auto-capture.md`。调用链如下：
 
 ```text
 Compose UI
@@ -29,10 +29,11 @@ core/storage/        初始化状态和本地配置
 当前接口版本对应：
 
 ```text
-应用版本：1.0
-Room Schema：v1
+应用版本：0.1（versionCode 1）
+Room Schema：v6
 包名：com.example.localledger
 最低 Android 版本：API 26
+编译 / 目标 SDK：35
 ```
 
 ## 2. 接入方式
@@ -99,7 +100,7 @@ val id = UUID.randomUUID().toString()
 
 ### 3.2 金额
 
-所有金额都使用人民币“分”为单位的 `Long`：
+金额使用账户币种的最小单位，类型为 `Long`。人民币、美元等到分，日元、韩元到元。下面的例子按人民币：
 
 ```text
 0.01 元 -> 1
@@ -1112,7 +1113,7 @@ repository.observeTransactions(ledgerId)
 5. 转账不进入收入、支出或分类统计。
 6. 账户余额不永久存储，每次根据初始余额和流水计算。
 7. 账户和分类只支持停用，不支持删除。
-8. 流水删除是硬删除，不可恢复。（计划变更：删除将要求同时传入账本 ID，跨账本删除按流水不存在处理。）
+8. 删除流水必须同时传入账本 ID，跨账本删除按流水不存在处理。界面上删除后，底部提示可以撤销。
 9. 已停用账户和分类保留历史展示，但不能用于新流水或编辑流水。
 10. 归档账本不会自动切换当前账本，前端必须更新配置状态。
 11. 流水修改和删除后，明细、统计及余额通过 Room `Flow` 自动刷新。
@@ -1132,7 +1133,7 @@ repository.observeTransactions(ledgerId)
     settings.json
 ```
 
-App 申请 `INTERNET`，只用于刷新汇率。不申请以下权限：
+App 申请 `INTERNET`，用于刷新汇率；AI 助手打开后也用于用户填写的接口。不申请以下权限：
 
 ```text
 READ_EXTERNAL_STORAGE
@@ -1140,7 +1141,7 @@ WRITE_EXTERNAL_STORAGE
 MANAGE_EXTERNAL_STORAGE
 ```
 
-云备份和设备迁移均明确排除业务数据。
+短信、通知、悬浮窗、麦克风和生物识别只服务自动记账、提醒、语音和应用锁，见 `README.md`。云备份和设备迁移均明确排除业务数据。用户自己的备份文件由「备份与恢复」写出，可选密码。
 
 ## 18. 源码位置
 
