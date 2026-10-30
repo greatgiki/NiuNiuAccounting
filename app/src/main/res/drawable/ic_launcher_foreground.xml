@@ -1,49 +1,53 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 牛牛记账: bookmark-bull mark. A ledger bookmark ribbon forms the bull's face, crowned by two crescent horns. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path
-        android:fillColor="#D9B77E"
-        android:pathData="M44,40 C36,39 30.5,34 32,27 C35,32 40,34 47,34.5 Z" />
-    <path
-        android:fillColor="#D9B77E"
-        android:pathData="M64,40 C72,39 77.5,34 76,27 C73,32 68,34 61,34.5 Z" />
-    <path
-        android:fillColor="#B08A52"
-        android:pathData="M40,45 L29,42 C30,47.5 34.5,50.5 41,50 Z" />
-    <path
-        android:fillColor="#B08A52"
-        android:pathData="M68,45 L79,42 C78,47.5 73.5,50.5 67,50 Z" />
-    <path
-        android:fillColor="#F1E3C6"
-        android:pathData="M45,35 L63,35 C67.5,35 70.5,38.5 70,43 L67.5,62 C66.5,70 61,76 54,76 C47,76 41.5,70 40.5,62 L38,43 C37.5,38.5 40.5,35 45,35 Z" />
-    <path
-        android:fillColor="#D9B77E"
-        android:pathData="M54,38 L58,43.5 L54,48 L50,43.5 Z" />
-    <path
-        android:fillColor="#1C1915"
-        android:pathData="M43,52.5 C44.5,48.5 49,47.8 51.2,50.6 C49.2,53 45.8,53.6 43,52.5 Z" />
-    <path
-        android:fillColor="#1C1915"
-        android:pathData="M65,52.5 C63.5,48.5 59,47.8 56.8,50.6 C58.8,53 62.2,53.6 65,52.5 Z" />
-    <path
-        android:fillColor="#FFF8EC"
-        android:pathData="M47.7,50.4 a0.9,0.9 0,1 0,1.8,0 a0.9,0.9 0,1 0,-1.8,0 Z" />
-    <path
-        android:fillColor="#FFF8EC"
-        android:pathData="M58.5,50.4 a0.9,0.9 0,1 0,1.8,0 a0.9,0.9 0,1 0,-1.8,0 Z" />
-    <path
-        android:fillColor="#D9B77E"
-        android:pathData="M44.5,64 C44.5,58.5 63.5,58.5 63.5,64 C63.5,70.5 58.5,73.5 54,73.5 C49.5,73.5 44.5,70.5 44.5,64 Z" />
-    <path
-        android:fillColor="#1C1915"
-        android:pathData="M48.9,63.2 a1.4,1.8 0,1 0,2.8,0 a1.4,1.8 0,1 0,-2.8,0 Z M56.300000000000004,63.2 a1.4,1.8 0,1 0,2.8,0 a1.4,1.8 0,1 0,-2.8,0 Z" />
-    <path
-        android:strokeColor="#1C1915"
-        android:strokeWidth="1.3"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M50.5,68.3 Q54,70.8 57.5,68.3" />
+    <group android:pivotX="54" android:pivotY="52.5" android:scaleX="0.88" android:scaleY="0.88" android:translateY="1.5">
+        <path android:strokeWidth="1.2" android:strokeLineJoin="round" android:pathData="M44,50 C34,49.5 27.5,43 29.5,35 C30.5,31 33,28.5 36.5,27.5 C33.5,32 33.5,38 37,41.5 C39,43.5 41.5,44.5 44,44.5 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="54" android:startY="28" android:endX="54" android:endY="80">
+                <item android:offset="0" android:color="#F2DDB0" />
+                <item android:offset="1" android:color="#C49A5A" />
+            </gradient>
+        </aapt:attr>
+        <aapt:attr name="android:strokeColor">
+            <gradient android:type="linear" android:startX="54" android:startY="28" android:endX="54" android:endY="80">
+                <item android:offset="0" android:color="#F2DDB0" />
+                <item android:offset="1" android:color="#C49A5A" />
+            </gradient>
+        </aapt:attr>
+        </path>
+        <path android:strokeWidth="1.2" android:strokeLineJoin="round" android:pathData="M64,50 C74,49.5 80.5,43 78.5,35 C77.5,31 75,28.5 71.5,27.5 C74.5,32 74.5,38 71,41.5 C69,43.5 66.5,44.5 64,44.5 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="54" android:startY="28" android:endX="54" android:endY="80">
+                <item android:offset="0" android:color="#F2DDB0" />
+                <item android:offset="1" android:color="#C49A5A" />
+            </gradient>
+        </aapt:attr>
+        <aapt:attr name="android:strokeColor">
+            <gradient android:type="linear" android:startX="54" android:startY="28" android:endX="54" android:endY="80">
+                <item android:offset="0" android:color="#F2DDB0" />
+                <item android:offset="1" android:color="#C49A5A" />
+            </gradient>
+        </aapt:attr>
+        </path>
+        <path android:strokeWidth="1.2" android:strokeLineJoin="round" android:pathData="M43,44 C43,41.5 45,40 47.5,40 L60.5,40 C63,40 65,41.5 65,44 L62.5,76 L54,69.5 L45.5,76 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="54" android:startY="28" android:endX="54" android:endY="80">
+                <item android:offset="0" android:color="#F2DDB0" />
+                <item android:offset="1" android:color="#C49A5A" />
+            </gradient>
+        </aapt:attr>
+        <aapt:attr name="android:strokeColor">
+            <gradient android:type="linear" android:startX="54" android:startY="28" android:endX="54" android:endY="80">
+                <item android:offset="0" android:color="#F2DDB0" />
+                <item android:offset="1" android:color="#C49A5A" />
+            </gradient>
+        </aapt:attr>
+        </path>
+    </group>
 </vector>
