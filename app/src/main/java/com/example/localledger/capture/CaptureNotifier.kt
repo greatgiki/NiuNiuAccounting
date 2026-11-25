@@ -63,7 +63,11 @@ class CaptureNotifier @Inject constructor(
     }
 
     fun showWaiting(sheet: CaptureSheet) {
-        if (!canNotify()) return
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
         ensureWaiting()
         val who = sheet.merchant.ifBlank { sheet.source.label() }
         val body = "${MinorText.format(sheet.amountMinor)} · $who。支付保护可能会挡住悬浮窗，离开页面后会弹出确认。"
@@ -98,11 +102,6 @@ class CaptureNotifier @Inject constructor(
 
     private fun pendingFlags(): Int {
         return PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-    }
-
-    private fun canNotify(): Boolean {
-        return Build.VERSION.SDK_INT < 33 ||
-            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
     }
 
     private fun ensureStatus() {

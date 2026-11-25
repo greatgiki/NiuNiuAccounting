@@ -67,7 +67,7 @@
 - **UI**：低调奢华风格（见 `docs/design-system.md`）；任何页面不低于 30 fps、不卡顿；全局禁止 overscroll 回弹 / 拉伸效果，新增可滚动组件也不得出现。
 - **网络服务**：只用中国大陆可访问的服务；汇率优先人民银行（CFETS）。
 - **隐私**：识别在本机完成，不上传账单数据；AI 只用用户自己的 key 直连。
-- **打包**：只产出一个已签名 APK，命名 `NiuNiuAccounting-<sha>.apk`，不带 debug / release 字样。
+- **打包**：只产出一个已签名 APK，命名 `NiuNiuAccounting-<sha>.apk`，不带 debug / release 字样。`app/build.gradle.kts` 通过未跟踪的 `keystore.properties` 或环境变量（`KEYSTORE_FILE`、`KEYSTORE_PASSWORD`、`KEY_ALIAS`、`KEY_PASSWORD`）加载正式签名；GitHub Release 由 `.github/workflows/release.yml` 在推送 `v*` 标签或手动触发时自动构建发布（使用 Actions Secrets 中的 `KEYSTORE_BASE64` 等密钥）。
 - **Git**：
   - 作者与提交者均为 `Ge Kai <118527150+greatgiki@users.noreply.github.com>`，不得带 Co-authored-by 或 Cursor 相关 trailer。
   - 开发完推送到分支；用户要求合并前不开 PR。

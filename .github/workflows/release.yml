@@ -1,0 +1,179 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "发布的 Git 标签名（如 v0.1）"
+        required: true
+        type: string
+      prerelease:
+        description: "是否标记为预发布（Pre-release）"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.inputs.tag_name || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build & Publish APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept Android SDK licenses
+        run: yes | sdkmanager --licenses > /dev/null || true
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Prepare release keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          missing=()
+          [ -z "${KEYSTORE_BASE64:-}" ] && missing+=("KEYSTORE_BASE64")
+          [ -z "${KEYSTORE_PASSWORD:-}" ] && missing+=("KEYSTORE_PASSWORD")
+          [ -z "${KEY_ALIAS:-}" ] && missing+=("KEY_ALIAS")
+          [ -z "${KEY_PASSWORD:-}" ] && missing+=("KEY_PASSWORD")
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::缺少正式版签名 Repository Secrets: ${missing[*]}。请在 GitHub 仓库 Settings -> Secrets and variables -> Actions 中配置后重试。"
+            exit 1
+          fi
+
+          KEYSTORE_PATH="${RUNNER_TEMP}/release.jks"
+          printf '%s' "${KEYSTORE_BASE64}" | tr -d '[:space:]' | base64 -d > "${KEYSTORE_PATH}"
+          chmod 600 "${KEYSTORE_PATH}"
+          echo "KEYSTORE_FILE=${KEYSTORE_PATH}" >> "${GITHUB_ENV}"
+
+      - name: Run unit tests, lint, and signed release build
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew testDebugUnitTest lintDebug assembleRelease --no-daemon
+
+      - name: Verify signature and prepare APK artifact
+        env:
+          INPUT_TAG_NAME: ${{ github.event.inputs.tag_name }}
+          INPUT_PRERELEASE: ${{ github.event.inputs.prerelease }}
+        run: |
+          set -euo pipefail
+          SIGNED_APK="app/build/outputs/apk/release/app-release.apk"
+          if [ ! -f "${SIGNED_APK}" ]; then
+            echo "::error::未找到已签名安装包 ${SIGNED_APK}"
+            exit 1
+          fi
+
+          APKSIGNER="$(find "${ANDROID_HOME}/build-tools" -name apksigner | sort -V | tail -n 1)"
+          CERT_INFO="$("${APKSIGNER}" verify --verbose --print-certs "${SIGNED_APK}")"
+          echo "${CERT_INFO}"
+          CERT_SHA256="$(printf '%s\n' "${CERT_INFO}" | awk -F': ' '/Signer #1 certificate SHA-256 digest/{print $2; exit}')"
+
+          SHORT_SHA="$(git rev-parse --short=7 HEAD)"
+          APK_NAME="NiuNiuAccounting-${SHORT_SHA}.apk"
+          cp "${SIGNED_APK}" "${APK_NAME}"
+          APK_SHA256="$(sha256sum "${APK_NAME}" | awk '{print $1}')"
+
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            RELEASE_TAG="$(printf '%s' "${INPUT_TAG_NAME}" | tr -d '[:space:]')"
+            if [[ ! "${RELEASE_TAG}" =~ ^v[0-9A-Za-z._-]+$ ]]; then
+              echo "::error::无效的标签名 '${RELEASE_TAG}'，应以 v 开头且仅包含字母、数字、点、下划线或连字符（如 v0.1）。"
+              exit 1
+            fi
+          else
+            RELEASE_TAG="${GITHUB_REF_NAME}"
+          fi
+
+          IS_PRERELEASE="false"
+          if [ "${INPUT_PRERELEASE}" = "true" ] || [[ "${RELEASE_TAG}" == *-* ]]; then
+            IS_PRERELEASE="true"
+          fi
+
+          NOTES_FILE="${RUNNER_TEMP}/release-notes.md"
+          cat > "${NOTES_FILE}" <<EOF
+          ### 安装与校验
+
+          - **安装包**：\`${APK_NAME}\`（对应提交 \`${SHORT_SHA}\`）
+          - **系统要求**：Android 8.0（API 26）及以上
+          - **APK SHA-256**：\`${APK_SHA256}\`
+          - **签名证书 SHA-256**：\`${CERT_SHA256:-unknown}\`
+
+          > **数据安全与升级提示**：账本数据仅保存在手机本机（已关闭系统云备份）。升级新版本请直接下载 APK **覆盖安装**，切勿先卸载旧版（卸载会清除本机账本数据）；重要账本建议定期通过「设置 → 备份与恢复」导出备份。
+          EOF
+
+          {
+            echo "APK_NAME=${APK_NAME}"
+            echo "RELEASE_TAG=${RELEASE_TAG}"
+            echo "IS_PRERELEASE=${IS_PRERELEASE}"
+            echo "NOTES_FILE=${NOTES_FILE}"
+          } >> "${GITHUB_ENV}"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            OLD_ASSETS="$(gh release view "${RELEASE_TAG}" --json assets --jq '.assets[].name')"
+            while IFS= read -r asset; do
+              if [ -n "${asset}" ]; then
+                gh release delete-asset "${RELEASE_TAG}" "${asset}" --yes
+              fi
+            done <<< "${OLD_ASSETS}"
+
+            CHANGELOG="$(gh api "repos/${GITHUB_REPOSITORY}/releases/generate-notes" \
+              -f tag_name="${RELEASE_TAG}" \
+              -f target_commitish="${GITHUB_SHA}" \
+              --jq '.body' || true)"
+            FULL_NOTES="${RUNNER_TEMP}/full-release-notes.md"
+            if [ -n "${CHANGELOG}" ]; then
+              printf '%s\n\n%s\n' "$(cat "${NOTES_FILE}")" "${CHANGELOG}" > "${FULL_NOTES}"
+            else
+              cp "${NOTES_FILE}" "${FULL_NOTES}"
+            fi
+
+            gh release upload "${RELEASE_TAG}" "${APK_NAME}" --clobber
+            gh release edit "${RELEASE_TAG}" \
+              --title "牛牛记账 ${RELEASE_TAG}" \
+              --notes-file "${FULL_NOTES}" \
+              --prerelease="${IS_PRERELEASE}"
+          else
+            gh release create "${RELEASE_TAG}" "${APK_NAME}" \
+              --target "${GITHUB_SHA}" \
+              --title "牛牛记账 ${RELEASE_TAG}" \
+              --notes "$(cat "${NOTES_FILE}")" \
+              --generate-notes \
+              --prerelease="${IS_PRERELEASE}"
+          fi
+
+      - name: Clean up temporary keystore
+        if: always()
+        run: rm -f "${RUNNER_TEMP}/release.jks" "${RUNNER_TEMP}/release-notes.md" "${RUNNER_TEMP}/full-release-notes.md"

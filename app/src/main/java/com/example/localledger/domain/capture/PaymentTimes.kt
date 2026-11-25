@@ -22,7 +22,7 @@ object PaymentTimes {
             )
         }
         val match = monthDay.find(compact) ?: return null
-        val today = LocalDate.ofInstant(Instant.ofEpochMilli(now), zone)
+        val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
         val month = match.groupValues[1].toInt()
         val day = match.groupValues[2].toInt()
         val candidate = runCatching { LocalDate.of(today.year, month, day) }.getOrNull() ?: return null

@@ -118,7 +118,9 @@ Room schema 当前为 v6。迁移都在 `WalletDatabase.kt`，导出的 schema �
 bash ./gradlew testDebugUnitTest lintDebug assembleDebug assembleRelease
 ```
 
-发布构建会打开 R8。工程里的 release 构建类型没有单独的签名配置，打出来的是未签名包，除非本机另行配置签名。
+发布构建会打开 R8 与资源压缩。`app/build.gradle.kts` 从根目录未跟踪的 `keystore.properties`（`storeFile`、`storePassword`、`keyAlias`、`keyPassword`）或同名环境变量（`KEYSTORE_FILE`、`KEYSTORE_PASSWORD`、`KEY_ALIAS`、`KEY_PASSWORD`）读取正式签名；未提供签名配置时回退产出未签名包。
+
+推送 `v*` 标签（或在 GitHub Actions 手动触发 `.github/workflows/release.yml`）时，使用仓库 Actions Secrets（`KEYSTORE_BASE64`、`KEYSTORE_PASSWORD`、`KEY_ALIAS`、`KEY_PASSWORD`）运行单测、Lint 与正式签名打包，向 GitHub Release 发布单一安装包 `NiuNiuAccounting-<sha>.apk`。
 
 Room Schema 导出到 `app/schemas/`。当前是 Schema v6，迁移测试覆盖从导出的旧 schema 升到最新版本。
 后续每次修改 Schema 都应提升数据库版本、加入显式 Migration，并以导出的旧 Schema 编写升级测试。
